@@ -21,6 +21,8 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY src/templates ./dist/templates
+COPY seo/ ./seo/
+COPY creatives/ ./creatives/
 
 RUN mkdir -p /app/reports
 

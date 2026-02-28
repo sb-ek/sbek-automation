@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { crawler } from '../services/crawler.service.js';
 import { openai } from '../services/openai.service.js';
 import { sheets } from '../services/googlesheets.service.js';
@@ -50,14 +51,20 @@ export async function processCompetitorCrawl(
   if (hasSignificantChanges) {
     logger.info({ competitorName }, 'Significant competitor changes detected — sending alert');
 
+    const adminPhone = env.BRAND_SUPPORT_PHONE;
+    if (!adminPhone) {
+      logger.warn({ competitorName }, 'No BRAND_SUPPORT_PHONE configured — skipping competitor WhatsApp alert');
+      return;
+    }
+
     await notification.add(`competitor-alert-${competitorName}-${Date.now()}`, {
       channel: 'whatsapp',
-      recipientPhone: undefined, // Admin phone — set via env or config
+      recipientPhone: adminPhone,
       recipientName: 'SBEK Admin',
-      templateName: 'qc_failed_alert', // Reuse internal alert template
+      templateName: 'qc_failed_alert',
       templateData: {
         order_id: competitorName,
-        issues: `Significant changes detected on ${competitorName}. Check System Logs for full analysis.`,
+        failed_items: `Significant changes detected on ${competitorName}. Check System Logs for full analysis.`,
       },
     });
   }

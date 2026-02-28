@@ -63,6 +63,24 @@ class EmailService {
   // ── Public methods ───────────────────────────────────────────────
 
   /**
+   * Brand-level defaults injected into every email template.
+   * Individual template data can override these.
+   */
+  private getBrandDefaults(): Record<string, string> {
+    return {
+      brand_name: env.BRAND_NAME || 'SBEK',
+      brand_website: env.BRAND_WEBSITE || '',
+      support_phone: env.BRAND_SUPPORT_PHONE || '',
+      support_email: env.BRAND_SUPPORT_EMAIL || '',
+      instagram_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/instagram` : 'https://instagram.com/sbek.jewelry',
+      facebook_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/facebook` : 'https://facebook.com/sbekjewelry',
+      pinterest_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/pinterest` : 'https://pinterest.com/sbekjewelry',
+      unsubscribe_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/unsubscribe` : '#',
+      review_url: env.REVIEW_URL || '',
+    };
+  }
+
+  /**
    * Send an email rendered from a pre-compiled Handlebars template.
    */
   async sendEmail(
@@ -72,7 +90,7 @@ class EmailService {
     data: Record<string, string>,
   ): Promise<void> {
     const template = this.getTemplate(templateName);
-    const html = template(data);
+    const html = template({ ...this.getBrandDefaults(), ...data });
 
     try {
       const info = await this.transporter.sendMail({
@@ -159,9 +177,17 @@ class EmailService {
 
   /**
    * Retrieve a compiled template by name or throw if it does not exist.
+   * Supports lookup by exact name or by mapping common aliases
+   * (e.g. "order_shipped" -> "shipped").
    */
   private getTemplate(name: string): HandlebarsTemplateDelegate {
-    const template = this.templates.get(name);
+    let template = this.templates.get(name);
+
+    // Fallback: strip "order_" prefix to match file names like shipped.hbs
+    if (!template && name.startsWith('order_')) {
+      template = this.templates.get(name.replace('order_', ''));
+    }
+
     if (!template) {
       throw new Error(
         `Email template "${name}" not found. Available: ${[...this.templates.keys()].join(', ') || '(none)'}`,

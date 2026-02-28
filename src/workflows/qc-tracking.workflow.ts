@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { sheets } from '../services/googlesheets.service.js';
 import { notification } from '../queues/registry.js';
 import type { QCCheckPayload } from '../queues/types.js';
@@ -60,15 +61,15 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
   const anyFailed = items.some((row) => row['Pass/Fail'] === 'Fail');
 
   if (allPassed) {
-    // QC passed -- update order status and notify customer
+    // QC passed -- advance order to Ready to Ship and notify customer
     await sheets.updateOrder(String(orderId), {
-      'Status': 'QC',
+      'Status': 'Ready to Ship',
       'Notes': 'QC Passed - Ready for dispatch',
       'Last Updated': formatDate(new Date()),
     });
 
     // Get order details for notification
-    const orders = await sheets.getOrdersByStatus('QC');
+    const orders = await sheets.getOrdersByStatus('Ready to Ship');
     const order = orders?.find((row) => row['Order ID'] === String(orderId));
 
     if (order) {
@@ -76,6 +77,11 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
       const customerEmail = order['Email'];
 
       if (customerPhone || customerEmail) {
+        // Calculate estimated ship date (2 business days from now)
+        const shipDate = new Date();
+        shipDate.setDate(shipDate.getDate() + 2);
+        if (shipDate.getDay() === 0) shipDate.setDate(shipDate.getDate() + 1);
+
         await notification.add(`notify-qc-passed-${orderId}`, {
           channel: 'both',
           recipientPhone: customerPhone || undefined,
@@ -86,6 +92,7 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
             customer_name: order['Customer Name'] || 'Customer',
             order_id: String(orderId),
             product_name: order['Product'] || '',
+            ship_date: formatDate(shipDate),
           },
         });
       }
@@ -116,9 +123,13 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
     });
 
     // Send internal alert
+    const adminPhone = env.BRAND_SUPPORT_PHONE;
+    if (!adminPhone) {
+      logger.warn({ orderId }, 'No BRAND_SUPPORT_PHONE configured — skipping QC failure WhatsApp alert');
+    }
     await notification.add(`qc-failed-alert-${orderId}`, {
       channel: 'whatsapp',
-      recipientPhone: '', // Will be resolved from team config
+      recipientPhone: adminPhone || undefined,
       recipientName: 'Production Team',
       templateName: 'qc_failed_alert',
       templateData: {
