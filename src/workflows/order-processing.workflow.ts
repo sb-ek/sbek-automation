@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { woocommerce } from '../services/woocommerce.service.js';
 import { sheets } from '../services/googlesheets.service.js';
 import { notification } from '../queues/registry.js';
@@ -99,7 +100,9 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
           order_id: String(parsed.orderId),
           product_name: parsed.products,
           amount: parsed.amount,
+          order_date: parsed.orderDate || formatDate(new Date()),
           delivery_date: promisedDelivery,
+          tracking_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/my-account/orders/` : '#',
         },
       });
     }

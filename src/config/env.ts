@@ -42,6 +42,16 @@ const envSchema = z.object({
   // ── OpenAI ─────────────────────────────────────────────
   OPENAI_API_KEY: z.string().min(1),
 
+  // ── Gemini / Nano Banana (image generation) ──────────
+  GEMINI_API_KEY: z.string().min(1).optional(),
+
+  // ── Wati (WhatsApp backup) ───────────────────────────
+  WATI_API_KEY: z.string().min(1).optional(),
+  WATI_BASE_URL: z.string().url().optional(),
+
+  // ── Interakt (WhatsApp backup) ───────────────────────
+  INTERAKT_API_KEY: z.string().min(1).optional(),
+
   // ── Postiz (social-media scheduling) ───────────────────
   POSTIZ_API_KEY: z.string().min(1).optional(),
   POSTIZ_BASE_URL: z

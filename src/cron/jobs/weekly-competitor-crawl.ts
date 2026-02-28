@@ -1,21 +1,23 @@
 import { logger } from '../../config/logger.js';
 import { competitorCrawl } from '../../queues/registry.js';
+import { sheets } from '../../services/googlesheets.service.js';
 
 /**
  * Weekly cron: enqueue competitor crawl jobs.
- * Competitor URLs are configured here (will be moved to Sheets config in future).
+ * Competitor URLs are managed via the Google Sheets "Competitors" tab.
+ * Falls back to empty list if no competitors are configured.
  */
-
-// Default competitor list — these will be managed via Google Sheets "Competitors" tab
-const DEFAULT_COMPETITORS = [
-  { name: 'Competitor A', url: 'https://example-competitor-a.com' },
-  { name: 'Competitor B', url: 'https://example-competitor-b.com' },
-];
-
 export async function runWeeklyCompetitorCrawl(): Promise<void> {
+  const competitors = await sheets.getCompetitors();
+
+  if (competitors.length === 0) {
+    logger.warn('No active competitors configured in the Competitors sheet tab — skipping crawl');
+    return;
+  }
+
   let enqueued = 0;
 
-  for (const competitor of DEFAULT_COMPETITORS) {
+  for (const competitor of competitors) {
     await competitorCrawl.add(`crawl-${competitor.name}`, {
       competitorName: competitor.name,
       url: competitor.url,

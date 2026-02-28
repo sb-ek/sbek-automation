@@ -52,7 +52,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
         recipientPhone: phone,
         recipientEmail: customerEmail,
         recipientName: customerName,
-        templateName: 'shipped',
+        templateName: 'order_shipped',
         templateData: {
           customer_name: customerName,
           order_id: String(orderId),

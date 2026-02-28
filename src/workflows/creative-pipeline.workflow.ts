@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { nanobanana, type AspectRatio } from '../services/nanobanana.service.js';
 import { openai } from '../services/openai.service.js';
 import { sheets } from '../services/googlesheets.service.js';
 import type { CreativeGenerationPayload } from '../queues/types.js';
@@ -32,6 +33,16 @@ const VARIANT_PROMPTS: Record<string, (name: string, desc: string) => string> = 
     `and metal texture, ultra-sharp detail, dark moody background, cinematic feel.`,
 };
 
+// ── Variant → Aspect Ratio Mapping ───────────────────────────────────────────
+
+const VARIANT_ASPECT: Record<string, AspectRatio> = {
+  white_bg: '1:1',
+  lifestyle: '1:1',
+  festive: '1:1',
+  minimal_text: '1:1',
+  story_format: '9:16',
+};
+
 // ── Workflow ─────────────────────────────────────────────────────────────────
 
 /**
@@ -40,25 +51,39 @@ const VARIANT_PROMPTS: Record<string, (name: string, desc: string) => string> = 
  * Triggered by: creative-generation queue worker
  *
  * For each requested variant:
- * 1. Build a DALL-E prompt from the product info and variant type
- * 2. Generate the image via OpenAI
- * 3. Log the creative to the Creatives tab in Google Sheets
+ * 1. Build a prompt from the product info and variant type
+ * 2. Generate the image via Nano Banana (Gemini image generation)
+ * 3. Save the image to disk and log to the Creatives tab in Google Sheets
  *
  * After all variants, generate an Instagram caption for the product.
- * Returns an array of generated image URLs.
+ * Returns an array of saved file paths.
  */
 export async function processCreativeGeneration(
   payload: CreativeGenerationPayload,
 ): Promise<string[]> {
-  const { productId, productName, productDescription, category, variants } = payload;
+  const { productId, productName, productDescription, productImageUrl, category, variants } = payload;
 
   logger.info(
     { productId, productName, variantCount: variants.length },
-    'Starting creative generation workflow',
+    'Starting creative generation workflow (Nano Banana)',
   );
 
-  const imageUrls: string[] = [];
+  const filePaths: string[] = [];
   const now = new Date().toISOString();
+
+  // Fetch the product reference image if available (for style-transfer)
+  let referenceImageBase64: string | undefined;
+  if (productImageUrl) {
+    try {
+      const imgRes = await fetch(productImageUrl);
+      if (imgRes.ok) {
+        const arrayBuf = await imgRes.arrayBuffer();
+        referenceImageBase64 = Buffer.from(arrayBuf).toString('base64');
+      }
+    } catch (err) {
+      logger.warn({ err, productImageUrl }, 'Could not fetch product reference image — generating without it');
+    }
+  }
 
   // Generate an image for each requested variant
   for (const variant of variants) {
@@ -70,25 +95,29 @@ export async function processCreativeGeneration(
     }
 
     const prompt = promptBuilder(productName, productDescription);
-
-    // Choose size based on variant
-    const size: '1024x1024' | '1024x1792' | '1792x1024' =
-      variant === 'story_format' ? '1024x1792' : '1024x1024';
+    const aspectRatio = VARIANT_ASPECT[variant] ?? '1:1';
+    const filename = `product-${productId}-${variant}-${Date.now()}`;
 
     try {
-      const imageUrl = await openai.generateImage(prompt, { size, quality: 'hd' });
-      imageUrls.push(imageUrl);
+      const result = await nanobanana.generateAndSave(prompt, filename, {
+        aspectRatio,
+        imageSize: '2K',
+        referenceImageBase64,
+        referenceImageMimeType: 'image/jpeg',
+      });
 
-      logger.info({ productId, variant, imageUrl }, 'Creative image generated');
+      filePaths.push(result.filePath);
+
+      logger.info({ productId, variant, filePath: result.filePath }, 'Creative image generated via Nano Banana');
 
       // Log to Creatives tab in Sheets
       await sheets.appendCreative({
         'Product ID': String(productId),
         'Product Name': productName,
         'Variant': variant,
-        'Creative Type': 'AI Generated',
-        'Image URL': imageUrl,
-        'Drive Link': '',
+        'Creative Type': 'AI Generated (Nano Banana)',
+        'Image URL': '',
+        'Drive Link': result.filePath,
         'Generated Date': now,
         'Status': 'Generated',
         'Approved By': '',
@@ -120,9 +149,9 @@ export async function processCreativeGeneration(
   }
 
   logger.info(
-    { productId, productName, generatedCount: imageUrls.length, totalVariants: variants.length },
+    { productId, productName, generatedCount: filePaths.length, totalVariants: variants.length },
     'Creative generation workflow completed',
   );
 
-  return imageUrls;
+  return filePaths;
 }

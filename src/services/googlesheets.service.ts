@@ -20,6 +20,7 @@ const TAB_NAMES = {
   QC: 'QC',
   CUSTOMERS: 'Customers',
   CREATIVES: 'Creatives',
+  COMPETITORS: 'Competitors',
   SYSTEM_LOGS: 'System Logs',
 } as const;
 
@@ -94,6 +95,11 @@ const TAB_HEADERS: Record<string, string[]> = {
     'Status',
     'Approved By',
     'Posted Date',
+  ],
+  [TAB_NAMES.COMPETITORS]: [
+    'Name',
+    'URL',
+    'Active',
   ],
   [TAB_NAMES.SYSTEM_LOGS]: [
     'Timestamp',
@@ -582,6 +588,29 @@ class GoogleSheetsService {
         { err: error, productId, variant, status },
         'Error updating creative status',
       );
+    }
+  }
+
+  // ── Competitors tab ────────────────────────────────────────────────────
+
+  /** Return all active competitors from the Competitors sheet tab. */
+  async getCompetitors(): Promise<Array<{ name: string; url: string }>> {
+    this.assertInitialized();
+    try {
+      const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
+      if (!sheet) return [];
+
+      const rows = await sheet.getRows();
+      return rows
+        .filter((r) => r.get('Active') !== 'No' && r.get('Active') !== 'FALSE')
+        .map((r) => ({
+          name: r.get('Name') ?? '',
+          url: r.get('URL') ?? '',
+        }))
+        .filter((c) => c.name && c.url);
+    } catch (error) {
+      logger.error({ err: error }, 'Error fetching competitors');
+      return [];
     }
   }
 

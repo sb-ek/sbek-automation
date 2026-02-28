@@ -1,5 +1,6 @@
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
+import { settings } from './settings.service.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -23,8 +24,8 @@ export interface WhatsAppResponse {
 // ── Service ─────────────────────────────────────────────────────────
 
 class WhatsAppService {
-  private readonly baseUrl: string;
-  private readonly headers: Record<string, string>;
+  private baseUrl: string;
+  private headers: Record<string, string>;
 
   constructor() {
     this.baseUrl = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}`;
@@ -32,6 +33,19 @@ class WhatsAppService {
       Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
       'Content-Type': 'application/json',
     };
+  }
+
+  /** Re-initialize the WhatsApp client with the latest credentials from settings */
+  async refreshClient(): Promise<void> {
+    const phoneId = await settings.get('WHATSAPP_PHONE_NUMBER_ID');
+    const token = await settings.get('WHATSAPP_ACCESS_TOKEN');
+    if (phoneId || token) {
+      this.baseUrl = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneId ?? env.WHATSAPP_PHONE_NUMBER_ID}`;
+      this.headers = {
+        Authorization: `Bearer ${token ?? env.WHATSAPP_ACCESS_TOKEN}`,
+        'Content-Type': 'application/json',
+      };
+    }
   }
 
   // ── Public methods ───────────────────────────────────────────────

@@ -1,4 +1,5 @@
 import { logger } from '../config/logger.js';
+import { env } from '../config/env.js';
 import { sheets } from '../services/googlesheets.service.js';
 import { notification } from '../queues/registry.js';
 import type { ProductionUpdatePayload } from '../queues/types.js';
@@ -57,10 +58,11 @@ export async function createProductionTask(payload: ProductionUpdatePayload): Pr
   });
 
   // Send internal WhatsApp brief to assigned craftsperson (if phone is configured)
-  if (assignee) {
+  const adminPhone = env.BRAND_SUPPORT_PHONE;
+  if (assignee && adminPhone) {
     await notification.add(`production-brief-${orderId}`, {
       channel: 'whatsapp',
-      recipientPhone: '', // Will be resolved from team config in future
+      recipientPhone: adminPhone,
       recipientName: assignee,
       templateName: 'production_brief',
       templateData: {

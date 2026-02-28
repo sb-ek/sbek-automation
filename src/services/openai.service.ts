@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
+import { settings } from './settings.service.js';
 
 // ── Service ─────────────────────────────────────────────────────────────────
 
@@ -9,6 +10,14 @@ class OpenAIService {
 
   constructor() {
     this.client = new OpenAI({ apiKey: env.OPENAI_API_KEY });
+  }
+
+  /** Re-initialize the OpenAI client with the latest API key from settings */
+  async refreshClient(): Promise<void> {
+    const key = await settings.get('OPENAI_API_KEY');
+    if (key) {
+      this.client = new OpenAI({ apiKey: key });
+    }
   }
 
   // ── Generic Text Generation ────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import type { NotificationPayload } from '../types.js';
 import { whatsapp } from '../../services/whatsapp.service.js';
+import { wati } from '../../services/wati.service.js';
 import { email } from '../../services/email.service.js';
 
 function redisOpts() {
@@ -41,10 +42,24 @@ export const notificationWorker = new Worker<NotificationPayload>(
           ]
         );
         results.whatsapp = msgId;
-        logger.info({ recipientPhone, templateName, msgId }, 'WhatsApp sent');
-      } catch (err) {
-        logger.error({ err, recipientPhone, templateName }, 'WhatsApp failed');
-        throw err; // Let BullMQ retry
+        logger.info({ recipientPhone, templateName, msgId }, 'WhatsApp sent via Meta');
+      } catch (metaErr) {
+        logger.warn({ err: metaErr, recipientPhone, templateName }, 'Meta WhatsApp failed — trying backup');
+
+        // Fallback to Wati / Interakt
+        if (wati.isConfigured()) {
+          try {
+            const backup = await wati.sendTemplate(recipientPhone, templateName, templateData);
+            results.whatsapp = `${backup.provider}:${backup.messageId}`;
+            logger.info({ recipientPhone, templateName, provider: backup.provider }, 'WhatsApp sent via backup');
+          } catch (backupErr) {
+            logger.error({ err: backupErr, recipientPhone, templateName }, 'All WhatsApp providers failed');
+            throw backupErr;
+          }
+        } else {
+          logger.error({ recipientPhone, templateName }, 'Meta WhatsApp failed and no backup configured');
+          throw metaErr;
+        }
       }
     }
 
@@ -81,8 +96,10 @@ const emailSubjects: Record<string, string> = {
   'order_confirmation': 'Thank you for your SBEK order! 🎉',
   'production_started': 'Your SBEK piece is being crafted ✨',
   'qc_passed': 'Your SBEK order passed quality check!',
+  'order_shipped': 'Your SBEK order is on its way! 📦',
   'shipped': 'Your SBEK order is on its way! 📦',
   'delivered': 'Your SBEK order has been delivered 💎',
+  'order_delivered': 'Your SBEK order has been delivered 💎',
   'review_request': "We'd love your feedback on your SBEK purchase",
 };
 
