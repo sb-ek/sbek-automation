@@ -43,7 +43,7 @@ function buildHtml(analysis: AnalysisResult, competitorName: string): string {
     url,
     analyzedAt,
     productCount,
-    previousProductCount,
+    previousProductCount: _previousProductCount,
     productCountDelta,
     newProducts,
     removedProducts,
