@@ -153,7 +153,7 @@ function generateWebhookEvents(): Array<{
     const customer = randomFrom(customerNames);
     const product = randomFrom(products);
     const amount = randomBetween(15000, 250000);
-    const processed = Math.random() < 0.85;
+    const processed = Math.random() < 0.96;
     const createdAt = daysAgo(randomBetween(0, 6));
     const processedAt = processed
       ? new Date(createdAt.getTime() + randomBetween(500, 30000))
@@ -221,9 +221,9 @@ function generateJobLogs(): Array<{
     const queueName = randomFrom(queueNames);
     const roll = Math.random();
     let status: string;
-    if (roll < 0.70) status = 'completed';
-    else if (roll < 0.85) status = 'active';
-    else if (roll < 0.95) status = 'failed';
+    if (roll < 0.88) status = 'completed';
+    else if (roll < 0.94) status = 'active';
+    else if (roll < 0.97) status = 'failed';
     else status = 'queued';
 
     const createdAt = daysAgo(randomBetween(0, 2));
@@ -309,7 +309,7 @@ function generateCronRuns(): Array<{
   for (let i = 0; i < 30; i++) {
     const jobName = randomFrom(cronJobNames);
     const startedAt = daysAgo(randomBetween(0, 4));
-    const succeeded = Math.random() < 0.80;
+    const succeeded = Math.random() < 0.95;
     const duration = randomBetween(2000, 60000);
     const completedAt = succeeded ? new Date(startedAt.getTime() + duration) : null;
     const itemsProcessed = succeeded ? randomBetween(5, 50) : randomBetween(0, 5);
@@ -401,13 +401,13 @@ interface QueueSpec {
 }
 
 const queueSpecs: QueueSpec[] = [
-  { name: 'order-sync', completed: 12, waiting: 3, active: 0, delayed: 0, failed: 1 },
-  { name: 'notification', completed: 25, waiting: 0, active: 2, delayed: 0, failed: 2 },
-  { name: 'review-request', completed: 8, waiting: 0, active: 0, delayed: 5, failed: 0 },
-  { name: 'content-generation', completed: 15, waiting: 0, active: 1, delayed: 0, failed: 0 },
-  { name: 'creative-generation', completed: 10, waiting: 2, active: 0, delayed: 0, failed: 0 },
-  { name: 'social-posting', completed: 18, waiting: 0, active: 0, delayed: 0, failed: 1 },
-  { name: 'competitor-crawl', completed: 6, waiting: 1, active: 0, delayed: 0, failed: 0 },
+  { name: 'order-sync', completed: 45, waiting: 2, active: 1, delayed: 0, failed: 0 },
+  { name: 'notification', completed: 78, waiting: 0, active: 3, delayed: 0, failed: 1 },
+  { name: 'review-request', completed: 32, waiting: 0, active: 0, delayed: 4, failed: 0 },
+  { name: 'content-generation', completed: 28, waiting: 1, active: 2, delayed: 0, failed: 0 },
+  { name: 'creative-generation', completed: 19, waiting: 1, active: 1, delayed: 0, failed: 0 },
+  { name: 'social-posting', completed: 42, waiting: 0, active: 1, delayed: 0, failed: 0 },
+  { name: 'competitor-crawl', completed: 15, waiting: 0, active: 0, delayed: 0, failed: 0 },
 ];
 
 async function seedQueues() {
@@ -523,9 +523,10 @@ async function seed() {
   await db.insert(systemConfig).values(configData);
   console.log(`  Inserted ${configData.length} config entries.\n`);
 
-  // ---- Seed BullMQ queues ----
-  await seedQueues();
-  console.log('');
+  // NOTE: BullMQ queues are NOT seeded because the running workers would
+  // pick up demo jobs and fail them, creating ugly "failed" counts.
+  // Queue stats will show real data once real orders start flowing.
+  console.log('Skipping BullMQ queue seeding (workers would fail demo jobs).\n');
 
   // ---- Done ----
   console.log('=== Demo data seeded successfully! ===');
