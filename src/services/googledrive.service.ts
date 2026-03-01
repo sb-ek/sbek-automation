@@ -26,7 +26,7 @@ class GoogleDriveService {
     try {
       const auth = new JWT({
         email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        key: env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        key: (env.GOOGLE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
         scopes: ['https://www.googleapis.com/auth/drive.file'],
       });
 

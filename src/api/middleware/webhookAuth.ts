@@ -58,7 +58,7 @@ export function webhookAuth(
     return;
   }
 
-  const expected = createHmac('sha256', env.WOO_WEBHOOK_SECRET)
+  const expected = createHmac('sha256', env.WOO_WEBHOOK_SECRET ?? '')
     .update(req.rawBody)
     .digest('base64');
 

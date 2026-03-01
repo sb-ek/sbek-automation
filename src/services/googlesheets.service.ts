@@ -130,11 +130,11 @@ class GoogleSheetsService {
     try {
       const auth = new JWT({
         email: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-        key: env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        key: (env.GOOGLE_PRIVATE_KEY ?? '').replace(/\\n/g, '\n'),
         scopes: ['https://www.googleapis.com/auth/spreadsheets'],
       });
 
-      this.doc = new GoogleSpreadsheet(env.GOOGLE_SHEET_ID, auth);
+      this.doc = new GoogleSpreadsheet(env.GOOGLE_SHEET_ID ?? '', auth);
       await this.doc.loadInfo();
 
       logger.info(
