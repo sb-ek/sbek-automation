@@ -464,6 +464,11 @@ function GoogleSection({
   const [sheetUrl, setSheetUrl] = useState("");
   const [driveUrl, setDriveUrl] = useState("");
 
+  // Derived: do we have service account or OAuth creds?
+  const serviceAccountEmail = values["GOOGLE_SERVICE_ACCOUNT_EMAIL"] ?? "";
+  const hasServiceAccount = serviceAccountEmail.length > 0 && !serviceAccountEmail.includes("***") && sources["GOOGLE_SERVICE_ACCOUNT_EMAIL"] !== "none";
+  const hasOAuthCreds = (sources["GOOGLE_OAUTH_CLIENT_ID"] !== "none" && sources["GOOGLE_OAUTH_CLIENT_ID"] !== undefined);
+
   useEffect(() => {
     fetchApi<{ connected: boolean; email: string }>("/auth/google/status")
       .then(setOauthStatus)
@@ -577,7 +582,7 @@ function GoogleSection({
       {open && (
         <div className="px-5 pb-5" style={{ borderTop: "1px solid var(--border)" }}>
           <p className="text-[11px] leading-relaxed pt-4 pb-4" style={{ color: "var(--text-subtle)" }}>
-            Connect your Google account, then paste your Sheet and Drive folder links. The system will auto-create all required tabs and columns.
+            Share your Google Sheet and Drive folder with the service account email below, then paste the links. The system will auto-create all required tabs and columns.
           </p>
 
           {/* ── Step 1: Google Account ── */}
@@ -585,7 +590,7 @@ function GoogleSection({
             <div className="flex items-center gap-2 mb-2">
               <span
                 className="flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold"
-                style={{ background: oauthStatus.connected ? "var(--text-secondary)" : "var(--border-strong)", color: oauthStatus.connected ? "#fff" : "var(--text-muted)" }}
+                style={{ background: (oauthStatus.connected || hasServiceAccount) ? "var(--text-secondary)" : "var(--border-strong)", color: (oauthStatus.connected || hasServiceAccount) ? "#fff" : "var(--text-muted)" }}
               >
                 1
               </span>
@@ -594,7 +599,12 @@ function GoogleSection({
               </span>
               {oauthStatus.connected && (
                 <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
-                  Connected
+                  Connected via OAuth
+                </span>
+              )}
+              {!oauthStatus.connected && hasServiceAccount && (
+                <span className="text-[10px] font-medium uppercase tracking-wider" style={{ color: "var(--text-secondary)" }}>
+                  Connected via Service Account
                 </span>
               )}
             </div>
@@ -623,7 +633,7 @@ function GoogleSection({
                   {disconnecting ? "..." : "Disconnect"}
                 </button>
               </div>
-            ) : (
+            ) : hasOAuthCreds ? (
               <button
                 type="button"
                 onClick={handleConnect}
@@ -636,6 +646,44 @@ function GoogleSection({
                 </svg>
                 Login with Google
               </button>
+            ) : (
+              <div className="ml-7">
+                {hasServiceAccount ? (
+                  <div
+                    className="px-3 py-2.5"
+                    style={{ background: "#F0FAF0", border: "1px solid #D5E8D5", borderRadius: "var(--radius-sm)" }}
+                  >
+                    <p className="text-[11px] font-medium" style={{ color: "var(--text-secondary)" }}>
+                      Service account connected. Share your Sheet and Drive folder with this email as <strong>Editor</strong>:
+                    </p>
+                    <div className="flex items-center gap-2 mt-1.5">
+                      <code
+                        className="text-[11px] font-mono px-2 py-1 select-all cursor-text"
+                        style={{ background: "#E8F5E8", borderRadius: "var(--radius-sm)", color: "#333" }}
+                      >
+                        {serviceAccountEmail}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={() => { navigator.clipboard.writeText(serviceAccountEmail); }}
+                        className="text-[10px] px-2 py-0.5 font-medium uppercase tracking-wider"
+                        style={{ color: "var(--text-subtle)", background: "var(--bg-surface)", border: "1px solid var(--border)", borderRadius: "var(--radius-sm)" }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div
+                    className="px-3 py-2.5"
+                    style={{ background: "#FFF8F0", border: "1px solid #E8DDD5", borderRadius: "var(--radius-sm)" }}
+                  >
+                    <p className="text-[11px]" style={{ color: "var(--warning)" }}>
+                      No Google account connected. Set up OAuth credentials or a service account in Developer Settings below.
+                    </p>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -676,8 +724,8 @@ function GoogleSection({
                 spellCheck={false}
                 autoComplete="off"
               />
-              <p className="text-[11px] mt-1" style={{ color: "var(--text-subtle)" }}>
-                Paste the full URL of your Google Sheet. Create a blank sheet and share it with your connected Google account.
+              <p className="text-[11px] mt-1 leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                <strong>How to set up:</strong> Go to <a href="https://sheets.google.com" target="_blank" rel="noopener" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>sheets.google.com</a> &rarr; Create a blank spreadsheet &rarr; Click <strong>Share</strong> &rarr; Add <strong>{hasServiceAccount ? serviceAccountEmail : "your service account email"}</strong> as <strong>Editor</strong> &rarr; Copy the URL and paste it here.
               </p>
               {hasSheet && (
                 <p className="text-[10px] mt-0.5 font-mono" style={{ color: "var(--text-disabled)" }}>
@@ -713,8 +761,8 @@ function GoogleSection({
                 spellCheck={false}
                 autoComplete="off"
               />
-              <p className="text-[11px] mt-1" style={{ color: "var(--text-subtle)" }}>
-                Paste a Drive folder link where creatives will be uploaded. Leave empty to auto-create an &quot;SBEK Creatives&quot; folder.
+              <p className="text-[11px] mt-1 leading-relaxed" style={{ color: "var(--text-subtle)" }}>
+                <strong>How to set up:</strong> Go to <a href="https://drive.google.com" target="_blank" rel="noopener" style={{ color: "var(--text-muted)", textDecoration: "underline" }}>drive.google.com</a> &rarr; Create a new folder (e.g. &quot;SBEK Creatives&quot;) &rarr; Right-click &rarr; <strong>Share</strong> &rarr; Add <strong>{hasServiceAccount ? serviceAccountEmail : "your service account email"}</strong> as <strong>Editor</strong> &rarr; Open the folder &rarr; Copy the URL and paste it here. Leave empty to auto-create a folder.
               </p>
             </div>
           </div>
@@ -727,7 +775,7 @@ function GoogleSection({
             <button
               type="button"
               onClick={handleSetup}
-              disabled={setupStatus === "loading" || (!oauthStatus.connected && !values["GOOGLE_SERVICE_ACCOUNT_EMAIL"])}
+              disabled={setupStatus === "loading" || (!oauthStatus.connected && !hasServiceAccount)}
               className="btn-ghost px-4 py-2 text-[11px] uppercase tracking-[0.08em] font-medium flex items-center gap-2"
               style={{
                 background: setupStatus === "success" ? "#F0FAF0" : setupStatus === "error" ? "#FFF0F0" : "#F0F6FF",
@@ -778,8 +826,8 @@ function GoogleSection({
             </button>
             {devOpen && (
               <div className="mt-3 pl-4" style={{ borderLeft: "2px solid var(--border)" }}>
-                <p className="text-[10px] mb-3" style={{ color: "var(--text-disabled)" }}>
-                  Only needed if Google OAuth login is not available. These are set by your developer via environment variables.
+              <p className="text-[10px] mb-3" style={{ color: "var(--text-disabled)" }}>
+                  These are managed by your developer. The service account credentials are already configured via environment variables. OAuth credentials are only needed if you want the &quot;Login with Google&quot; button instead.
                 </p>
                 {[
                   { key: "GOOGLE_OAUTH_CLIENT_ID", label: "OAuth Client ID", type: "text" as const, hint: "Set by developer" },
