@@ -110,50 +110,21 @@ const SECTIONS: SectionDef[] = [
         key: "WHATSAPP_PHONE_NUMBER_ID",
         label: "Phone Number ID",
         type: "text",
-        hint: "Numeric ID, NOT your phone number",
-        howToGet: "Meta Business Suite → WhatsApp → API Setup → Phone Number ID (e.g. 123456789012345)",
+        hint: "Numeric ID from Meta, NOT your phone number (e.g. 123456789012345)",
+        howToGet: "Go to developers.facebook.com → Your App → WhatsApp → API Setup → copy the Phone Number ID shown under 'From'",
         required: true,
       },
       {
         key: "WHATSAPP_ACCESS_TOKEN",
         label: "Permanent Access Token",
         type: "password",
-        hint: "Long-lived token for API access",
-        howToGet: "Meta Business Suite → WhatsApp → API Setup → Generate Permanent Token",
+        hint: "Long-lived token — temporary tokens expire in 24 hours",
+        howToGet: "Go to business.facebook.com/settings/system-users → Create System User (Admin) → Generate Token → Select WhatsApp app → Permissions: whatsapp_business_messaging → Generate → copy",
         required: true,
       },
     ],
   },
-  {
-    id: "whatsapp-backup",
-    title: "WhatsApp Backup (Wati / Interakt)",
-    icon: "\u2709",
-    description:
-      "Backup WhatsApp providers. If Meta Cloud API fails, the system falls back to Wati first, then Interakt. Optional — skip if not needed.",
-    fields: [
-      {
-        key: "WATI_API_KEY",
-        label: "Wati API Key",
-        type: "password",
-        hint: "Optional backup provider",
-        howToGet: "Wati Dashboard → Settings → API Keys → copy",
-      },
-      {
-        key: "WATI_BASE_URL",
-        label: "Wati Base URL",
-        type: "text",
-        hint: "e.g. https://live-mt-server.wati.io",
-        howToGet: "Provided by Wati when you sign up",
-      },
-      {
-        key: "INTERAKT_API_KEY",
-        label: "Interakt API Key",
-        type: "password",
-        hint: "Optional 2nd fallback provider",
-        howToGet: "Interakt Dashboard → Developers → API Keys → copy",
-      },
-    ],
-  },
+  // WhatsApp backup (Wati/Interakt) removed — handled internally
   {
     id: "email-smtp",
     title: "Email (SMTP)",
@@ -190,8 +161,8 @@ const SECTIONS: SectionDef[] = [
         key: "SMTP_PASS",
         label: "Email Password / App Password",
         type: "password",
-        hint: "For Gmail: must be an App Password, not your regular password",
-        howToGet: "Gmail: Google Account → Security → 2-Step Verification → App Passwords → Generate for 'Mail' → copy the 16-char password",
+        hint: "For Gmail: must be an App Password, NOT your regular Gmail password",
+        howToGet: "Go to myaccount.google.com/security → Enable 2-Step Verification → Go to myaccount.google.com/apppasswords → App: Mail, Device: Other → type 'SBEK' → Generate → copy the 16-character password",
         required: true,
       },
       {
@@ -215,16 +186,16 @@ const SECTIONS: SectionDef[] = [
         key: "OPENROUTER_API_KEY",
         label: "OpenRouter API Key",
         type: "password",
-        hint: "Powers all text generation. Falls back to Gemini if not set.",
-        howToGet: "openrouter.ai → Sign Up → Dashboard → API Keys → Create Key → copy",
+        hint: "Powers all text generation — product descriptions, SEO, FAQs, captions, competitor analysis",
+        howToGet: "Go to openrouter.ai → Sign Up → Dashboard → Keys (openrouter.ai/keys) → Create Key → copy. Add credits at openrouter.ai/credits (pay-as-you-go, ~$0.10-0.50 per product)",
         required: true,
       },
       {
         key: "GEMINI_API_KEY",
         label: "Gemini API Key",
         type: "password",
-        hint: "Powers image generation. Also used as text fallback if OpenRouter is not set.",
-        howToGet: "aistudio.google.com → Get API Key → Create → copy",
+        hint: "Powers product image generation (ad creatives, lifestyle shots, festive themes)",
+        howToGet: "Go to aistudio.google.com/apikey → Sign in with Google → Create API Key → Select project → copy (starts with AIza...)",
       },
     ],
   },
@@ -240,35 +211,19 @@ const SECTIONS: SectionDef[] = [
         key: "POSTIZ_API_KEY",
         label: "Postiz API Key",
         type: "password",
-        hint: "For auto-scheduling social posts",
-        howToGet: "app.postiz.com → Settings → API → Generate Key → copy",
+        hint: "For auto-posting to Instagram, Facebook, LinkedIn, Twitter, Pinterest",
+        howToGet: "Go to app.postiz.com → Sign Up → Connect your social accounts → Settings → API section → Generate API Key → copy",
         required: true,
       },
       {
         key: "POSTIZ_BASE_URL",
         label: "Postiz Base URL",
         type: "text",
-        hint: "Default: https://app.postiz.com/api/v1 — change only if self-hosting",
+        hint: "Default: https://app.postiz.com/api/v1 — only change if self-hosting Postiz",
       },
     ],
   },
-  {
-    id: "crawler",
-    title: "Competitor Crawler",
-    icon: "\u2318",
-    description:
-      "Web crawler for competitive intelligence and price monitoring.",
-    testable: true,
-    fields: [
-      {
-        key: "CRAWLER_BASE_URL",
-        label: "Crawler Service URL",
-        type: "text",
-        hint: "Default: http://crawler:3001 (Docker) or http://localhost:3001 (dev)",
-        howToGet: "Only change this if you've deployed the crawler separately",
-      },
-    ],
-  },
+  // Crawler section removed — built-in, no client config needed
   {
     id: "brand",
     title: "Brand Identity",
@@ -1094,16 +1049,16 @@ function SettingsField({
     <div className="flex items-center gap-2 mb-1.5">
       <ValidationIcon filled={hasFill} />
       <label
-        className="text-xs"
+        className="text-[13px]"
         style={{
-          color: "var(--text-muted)",
-          fontWeight: field.required ? 600 : 400,
+          color: "#222",
+          fontWeight: field.required ? 700 : 500,
         }}
       >
         {field.label}
       </label>
       {field.required && (
-        <span className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: "#CC3333" }}>
+        <span className="text-[10px] font-bold uppercase tracking-wider" style={{ color: "#CC3333" }}>
           Required
         </span>
       )}
@@ -1113,10 +1068,10 @@ function SettingsField({
 
   const hintBlock = (
     <>
-      {field.hint && <p className="text-[11px] mt-1" style={{ color: "var(--text-subtle)" }}>{field.hint}</p>}
+      {field.hint && <p className="text-[12px] mt-1 font-medium" style={{ color: "#555" }}>{field.hint}</p>}
       {field.howToGet && (
-        <p className="text-[10px] mt-0.5 flex items-start gap-1" style={{ color: "var(--text-disabled)" }}>
-          <span className="flex-shrink-0 mt-px" style={{ fontSize: "9px" }}>&#9432;</span>
+        <p className="text-[11px] mt-1 flex items-start gap-1.5 leading-relaxed" style={{ color: "#777", background: "#F8F8F8", padding: "6px 8px", borderRadius: "4px", border: "1px solid #EEE" }}>
+          <span className="flex-shrink-0 font-bold" style={{ color: "#999" }}>How:</span>
           <span>{field.howToGet}</span>
         </p>
       )}
@@ -1307,8 +1262,8 @@ function SettingsSection({
         style={{ borderRadius: "var(--radius-md)" }}
       >
         <div className="flex items-center gap-3">
-          <span className="text-base leading-none" style={{ color: "var(--text-subtle)" }}>{section.icon}</span>
-          <h2 className="text-xs uppercase tracking-[0.15em] font-medium" style={{ color: "var(--text-muted)" }}>
+          <span className="text-base leading-none" style={{ color: "#555" }}>{section.icon}</span>
+          <h2 className="text-[13px] uppercase tracking-[0.12em] font-bold" style={{ color: "#333" }}>
             {section.title}
           </h2>
           <span
@@ -1333,7 +1288,7 @@ function SettingsSection({
           }}
         >
           <div className="px-5 pb-5" style={{ borderTop: "1px solid var(--border)" }}>
-            <p className="text-[11px] leading-relaxed pt-4 pb-3" style={{ color: "var(--text-subtle)" }}>
+            <p className="text-[12px] leading-relaxed pt-4 pb-3 font-medium" style={{ color: "#666" }}>
               {section.description}
             </p>
             <div>

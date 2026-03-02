@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SBEK Automation — Client Setup Guide</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Segoe UI', Arial, sans-serif; color: #222; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; }
+  h1 { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+  .subtitle { font-size: 14px; color: #666; margin-bottom: 40px; }
+  .section { margin-bottom: 36px; page-break-inside: avoid; }
+  .section-header { font-size: 18px; font-weight: 700; padding-bottom: 8px; border-bottom: 2px solid #222; margin-bottom: 16px; }
+  .section-number { display: inline-block; width: 28px; height: 28px; background: #222; color: #fff; text-align: center; line-height: 28px; border-radius: 50%; font-size: 14px; font-weight: 700; margin-right: 8px; }
+  .status-badge { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 3px; margin-left: 8px; vertical-align: middle; }
+  .status-needed { background: #FEE; color: #C33; border: 1px solid #C33; }
+  .status-have { background: #EFE; color: #2A7; border: 1px solid #2A7; }
+  .status-optional { background: #F8F8F8; color: #888; border: 1px solid #CCC; }
+  .field { margin-bottom: 20px; padding: 12px 16px; background: #FAFAFA; border: 1px solid #E0E0E0; border-radius: 6px; }
+  .field-name { font-size: 14px; font-weight: 700; color: #111; margin-bottom: 4px; }
+  .field-desc { font-size: 12px; color: #555; margin-bottom: 8px; }
+  .steps { padding-left: 20px; }
+  .steps li { font-size: 13px; color: #333; margin-bottom: 4px; }
+  .steps li strong { color: #000; }
+  a { color: #1a73e8; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .url-box { font-family: monospace; font-size: 12px; background: #F0F0F0; padding: 4px 8px; border-radius: 3px; display: inline-block; margin: 4px 0; word-break: break-all; }
+  .note { font-size: 12px; color: #666; background: #FFFDE7; padding: 8px 12px; border-left: 3px solid #FFC107; margin-top: 8px; border-radius: 3px; }
+  .summary { margin-top: 40px; page-break-before: always; }
+  .summary-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .summary-table th { text-align: left; padding: 8px 12px; background: #222; color: #fff; font-weight: 600; }
+  .summary-table td { padding: 8px 12px; border-bottom: 1px solid #E0E0E0; }
+  .summary-table tr:nth-child(even) td { background: #FAFAFA; }
+  .check { color: #2A7; font-weight: 700; font-size: 16px; }
+  .cross { color: #C33; font-weight: 700; font-size: 16px; }
+  @media print {
+    body { padding: 20px; font-size: 12px; }
+    .section { page-break-inside: avoid; }
+    a { color: #000; }
+    .url-box { background: #EEE; }
+  }
+  .divider { border: none; border-top: 1px solid #DDD; margin: 30px 0; }
+  .time-estimate { font-size: 11px; color: #888; font-weight: 600; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<h1>SBEK Automation — Setup Guide</h1>
+<p class="subtitle">Step-by-step instructions to get all your API keys and credentials configured. Print this page or save as PDF (Ctrl+P).</p>
+
+<hr class="divider">
+
+<!-- ============================================ -->
+<!-- SECTION 1: WhatsApp -->
+<!-- ============================================ -->
+
+<div class="section">
+  <h2 class="section-header">
+    <span class="section-number">1</span>
+    WhatsApp Business API
+    <span class="status-badge status-needed">NEEDED</span>
+  </h2>
+  <p class="time-estimate">Time: ~20-30 minutes (one-time setup)</p>
+
+  <div class="field">
+    <div class="field-name">Phone Number ID</div>
+    <div class="field-desc">A numeric ID assigned by Meta to your WhatsApp Business number (NOT your actual phone number)</div>
+    <ol class="steps">
+      <li>Go to <a href="https://developers.facebook.com" target="_blank">developers.facebook.com</a></li>
+      <li>Click <strong>My Apps</strong> (top right) → Select your app (or create one: type <strong>Business</strong>)</li>
+      <li>In the left sidebar, click <strong>WhatsApp</strong> → <strong>API Setup</strong></li>
+      <li>Under <strong>"From"</strong> you'll see your phone number and below it the <strong>Phone Number ID</strong></li>
+      <li>Copy the numeric ID (e.g. <code>123456789012345</code>) and paste it in the dashboard</li>
+    </ol>
+    <div class="note">If you don't have a Meta developer app yet: Go to <a href="https://developers.facebook.com/apps/create/" target="_blank">developers.facebook.com/apps/create</a> → Choose <strong>Business</strong> type → Add the <strong>WhatsApp</strong> product.</div>
+  </div>
+
+  <div class="field">
+    <div class="field-name">Permanent Access Token</div>
+    <div class="field-desc">A long-lived token so the system can send WhatsApp messages on your behalf. The temporary token from API Setup expires in 24 hours — you need a permanent one.</div>
+    <ol class="steps">
+      <li>Go to <a href="https://business.facebook.com/settings/system-users" target="_blank">business.facebook.com/settings/system-users</a></li>
+      <li>Click <strong>Add</strong> → Name: "SBEK Bot" → Role: <strong>Admin</strong> → Create</li>
+      <li>Click on the system user you just created</li>
+      <li>Click <strong>Generate New Token</strong></li>
+      <li>Select your <strong>WhatsApp app</strong> from the dropdown</li>
+      <li>Check these permissions:
+        <ul>
+          <li><strong>whatsapp_business_messaging</strong></li>
+          <li><strong>whatsapp_business_management</strong></li>
+        </ul>
+      </li>
+      <li>Click <strong>Generate Token</strong></li>
+      <li>Copy the token and paste it in the dashboard</li>
+    </ol>
+    <div class="note">This token does NOT expire. Keep it safe — anyone with this token can send WhatsApp messages from your number.</div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 2: OpenRouter -->
+<!-- ============================================ -->
+
+<div class="section">
+  <h2 class="section-header">
+    <span class="section-number">2</span>
+    OpenRouter API Key
+    <span class="status-badge status-needed">NEEDED</span>
+  </h2>
+  <p class="time-estimate">Time: ~5 minutes</p>
+
+  <div class="field">
+    <div class="field-name">OpenRouter API Key</div>
+    <div class="field-desc">Powers all AI text generation — product descriptions, SEO meta tags, FAQs, social captions, and competitor analysis.</div>
+    <ol class="steps">
+      <li>Go to <a href="https://openrouter.ai" target="_blank">openrouter.ai</a></li>
+      <li>Click <strong>Sign Up</strong> (or Sign In if you have an account)</li>
+      <li>Go to <a href="https://openrouter.ai/keys" target="_blank">openrouter.ai/keys</a></li>
+      <li>Click <strong>Create Key</strong> → Name: "SBEK" → Create</li>
+      <li>Copy the key (starts with <code>sk-or-...</code>) and paste it in the dashboard</li>
+    </ol>
+
+    <div class="note">
+      <strong>Adding credits:</strong> Go to <a href="https://openrouter.ai/credits" target="_blank">openrouter.ai/credits</a> → Add funds (pay-as-you-go). Typical cost: ~$0.10-0.50 per product processed. $10 credit will last hundreds of products.
+    </div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 3: Postiz -->
+<!-- ============================================ -->
+
+<div class="section">
+  <h2 class="section-header">
+    <span class="section-number">3</span>
+    Postiz — Social Media Posting
+    <span class="status-badge status-needed">NEEDED</span>
+  </h2>
+  <p class="time-estimate">Time: ~10 minutes</p>
+
+  <div class="field">
+    <div class="field-name">Postiz API Key</div>
+    <div class="field-desc">For auto-posting product creatives to Instagram, Facebook, LinkedIn, Twitter, and Pinterest.</div>
+    <ol class="steps">
+      <li>Go to <a href="https://app.postiz.com" target="_blank">app.postiz.com</a></li>
+      <li><strong>Sign Up</strong> for an account</li>
+      <li>Connect your social media accounts:
+        <ul>
+          <li>Instagram Business account</li>
+          <li>Facebook Page</li>
+          <li>LinkedIn (optional)</li>
+          <li>Twitter/X (optional)</li>
+          <li>Pinterest (optional)</li>
+        </ul>
+      </li>
+      <li>Go to <strong>Settings</strong> → <strong>API</strong> section</li>
+      <li>Click <strong>Generate API Key</strong></li>
+      <li>Copy the key and paste it in the dashboard</li>
+    </ol>
+    <div class="note">You need to connect at least one social account in Postiz before the API key will work for posting.</div>
+  </div>
+</div>
+
+<!-- ============================================ -->
+<!-- SECTION 4: SMTP -->
+<!-- ============================================ -->
+
+<div class="section">
+  <h2 class="section-header">
+    <span class="section-number">4</span>
+    Email (SMTP) — Gmail Setup
+    <span class="status-badge status-optional">OPTIONAL</span>
+  </h2>
+  <p class="time-estimate">Time: ~5 minutes | Skip this if you want emails sent from the developer's account</p>
+
+  <div class="field">
+    <div class="field-name">Gmail App Password</div>
+    <div class="field-desc">If you want order confirmation and shipping emails to come from YOUR Gmail address instead of the developer's, follow these steps:</div>
+    <ol class="steps">
+      <li>Go to <a href="https://myaccount.google.com/security" target="_blank">myaccount.google.com/security</a></li>
+      <li>Scroll down to <strong>2-Step Verification</strong> → Turn it ON (if not already)</li>
+      <li>Go to <a href="https://myaccount.google.com/apppasswords" target="_blank">myaccount.google.com/apppasswords</a></li>
+      <li>App: select <strong>Mail</strong></li>
+      <li>Device: select <strong>Other (Custom name)</strong> → type <strong>"SBEK"</strong></li>
+      <li>Click <strong>Generate</strong></li>
+      <li>Copy the <strong>16-character password</strong> shown (e.g. <code>abcd efgh ijkl mnop</code>)</li>
+    </ol>
+
+    <p style="font-size: 13px; font-weight: 600; margin-top: 12px; margin-bottom: 8px;">Then enter in the dashboard:</p>
+    <table style="width: 100%; font-size: 13px; border-collapse: collapse;">
+      <tr><td style="padding: 4px 0; font-weight: 600; width: 140px;">SMTP Host</td><td><code>smtp.gmail.com</code></td></tr>
+      <tr><td style="padding: 4px 0; font-weight: 600;">SMTP Port</td><td><code>587</code></td></tr>
+      <tr><td style="padding: 4px 0; font-weight: 600;">Email Address</td><td>Your Gmail (e.g. <code>yourname@gmail.com</code>)</td></tr>
+      <tr><td style="padding: 4px 0; font-weight: 600;">Password</td><td>The 16-character App Password from step 7</td></tr>
+      <tr><td style="padding: 4px 0; font-weight: 600;">From Display Name</td><td><code>SBEK &lt;yourname@gmail.com&gt;</code></td></tr>
+    </table>
+
+    <div class="note">Do NOT use your regular Gmail password — it won't work. You must use the App Password generated above. If you don't see the App Passwords option, make sure 2-Step Verification is enabled first.</div>
+  </div>
+</div>
+
+<hr class="divider">
+
+<!-- ============================================ -->
+<!-- SUMMARY TABLE -->
+<!-- ============================================ -->
+
+<div class="summary">
+  <h2 style="font-size: 18px; font-weight: 700; margin-bottom: 16px;">Summary — What You Need</h2>
+  <table class="summary-table">
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Service</th>
+        <th>What to Get</th>
+        <th>Where</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>1</td>
+        <td><strong>WooCommerce</strong></td>
+        <td>Store URL, Consumer Key, Consumer Secret, Webhook Secret</td>
+        <td>Your WooCommerce store admin</td>
+        <td><span class="check">DONE</span></td>
+      </tr>
+      <tr>
+        <td>2</td>
+        <td><strong>Google Sheets & Drive</strong></td>
+        <td>Share Sheet + Drive folder with service account email</td>
+        <td>Google Sheets / Drive</td>
+        <td><span class="check">DONE</span></td>
+      </tr>
+      <tr>
+        <td>3</td>
+        <td><strong>Gemini (Image AI)</strong></td>
+        <td>API Key</td>
+        <td>aistudio.google.com/apikey</td>
+        <td><span class="check">DONE</span></td>
+      </tr>
+      <tr>
+        <td>4</td>
+        <td><strong>WhatsApp Business</strong></td>
+        <td>Phone Number ID + Permanent Access Token</td>
+        <td>developers.facebook.com</td>
+        <td><span class="cross">NEEDED</span></td>
+      </tr>
+      <tr>
+        <td>5</td>
+        <td><strong>OpenRouter (Text AI)</strong></td>
+        <td>API Key</td>
+        <td>openrouter.ai/keys</td>
+        <td><span class="cross">NEEDED</span></td>
+      </tr>
+      <tr>
+        <td>6</td>
+        <td><strong>Postiz (Social Media)</strong></td>
+        <td>API Key + connected social accounts</td>
+        <td>app.postiz.com</td>
+        <td><span class="cross">NEEDED</span></td>
+      </tr>
+      <tr>
+        <td>7</td>
+        <td><strong>Email (SMTP)</strong></td>
+        <td>Gmail App Password (optional)</td>
+        <td>myaccount.google.com/apppasswords</td>
+        <td style="color: #888;">OPTIONAL</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<hr class="divider">
+
+<p style="font-size: 11px; color: #AAA; text-align: center; margin-top: 20px;">
+  SBEK Automation Setup Guide &mdash; Generated for client onboarding. Print: Ctrl+P → Save as PDF.
+</p>
+
+</body>
+</html>
