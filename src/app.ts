@@ -18,7 +18,7 @@ export function createApp() {
   // Security headers
   app.use(helmet());
   app.use(cors({
-    origin: true,
+    origin: process.env.CORS_ORIGIN || true,
     credentials: true,
   }));
 

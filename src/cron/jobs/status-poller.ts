@@ -78,15 +78,15 @@ export async function runStatusPoller(): Promise<void> {
       try {
         await dispatchTransition(orderId, previousStatus, currentStatus, order);
         changesDetected++;
+        // Only update snapshot on success
+        statusSnapshot.set(orderId, currentStatus);
       } catch (err) {
         logger.error(
           { err, orderId, from: previousStatus, to: currentStatus },
-          'Status poller: transition error',
+          'Status poller: transition error — will retry next cycle',
         );
+        // Don't update snapshot so transition retries on next poll
       }
-
-      // Update snapshot regardless (prevent re-triggering on error)
-      statusSnapshot.set(orderId, currentStatus);
     }
 
     // Cleanup deleted orders
@@ -118,7 +118,7 @@ async function dispatchTransition(
     'StatusPoller',
     `Order ${orderId}: ${oldStatus} → ${newStatus}`,
     JSON.stringify({ customer: order['Customer Name'], product: order['Product'] }),
-  ).catch(() => {}); // fire-and-forget
+  ).catch((err) => { logger.warn({ err }, 'Failed to log status change to Sheets'); });
 
   // Log to webhook_events for dashboard activity feed
   await db.insert(webhookEvents).values({
@@ -127,7 +127,7 @@ async function dispatchTransition(
     payload: { orderId, from: oldStatus, to: newStatus, customer: order['Customer Name'] },
     processed: true,
     processedAt: new Date(),
-  }).catch(() => {});
+  }).catch((err) => { logger.warn({ err }, 'Failed to log status change to DB'); });
 
   // Match on TARGET status — works regardless of which status it came from.
   // e.g. "New → QC" or "In Production → QC" both trigger QC actions.
@@ -163,7 +163,7 @@ async function dispatchTransition(
       const email = order['Email'] || undefined;
 
       if (phone || email) {
-        await notification.add(`poller-qc-passed-${orderId}-${Date.now()}`, {
+        await notification.add(`poller-qc-passed-${orderId}`, {
           channel: 'both',
           recipientPhone: phone,
           recipientEmail: email,

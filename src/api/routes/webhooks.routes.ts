@@ -52,8 +52,8 @@ webhooksRouter.post(
           rawPayload: payload,
         },
         {
-          // Deduplicate rapid webhook fires for the same order
-          jobId: `order-${orderId}-${Date.now()}`,
+          // Deduplicate rapid webhook fires for the same order+event
+          jobId: `order-${orderId}-${event}`,
         }
       );
 
@@ -63,7 +63,7 @@ webhooksRouter.post(
         event,
         payload: { orderId, customer: payload?.billing?.first_name, total: payload?.total },
         processed: false,
-      }).catch(() => {}); // fire-and-forget
+      }).catch((err) => { logger.warn({ err }, 'Failed to log webhook event to DB'); });
 
       logger.info({ orderId, event, webhookId }, 'Order webhook enqueued');
       res.json({ received: true, orderId, event });
@@ -186,7 +186,7 @@ webhooksRouter.post(
         event: topic || 'product.updated',
         payload: { productId, productName, jobsEnqueued: jobs.length },
         processed: false,
-      }).catch(() => {});
+      }).catch((err) => { logger.warn({ err }, 'Failed to log webhook event to DB'); });
 
       logger.info({ productId, productName, jobCount: jobs.length }, 'Product webhook jobs enqueued');
       res.json({ received: true, productId, topic, jobsEnqueued: jobs.length });
