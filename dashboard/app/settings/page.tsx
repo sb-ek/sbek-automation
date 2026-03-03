@@ -199,30 +199,7 @@ const SECTIONS: SectionDef[] = [
       },
     ],
   },
-  {
-    id: "social-media",
-    title: "Social Media (Postiz)",
-    icon: "\u269B",
-    description:
-      "Auto-publish to Instagram, Facebook, and Pinterest via Postiz scheduling.",
-    testable: true,
-    fields: [
-      {
-        key: "POSTIZ_API_KEY",
-        label: "Postiz API Key",
-        type: "password",
-        hint: "For auto-posting to Instagram, Facebook, LinkedIn, Twitter, Pinterest",
-        howToGet: "Go to app.postiz.com → Sign Up → Connect your social accounts → Settings → API section → Generate API Key → copy",
-        required: true,
-      },
-      {
-        key: "POSTIZ_BASE_URL",
-        label: "Postiz Base URL",
-        type: "text",
-        hint: "Default: https://app.postiz.com/api/v1 — only change if self-hosting Postiz",
-      },
-    ],
-  },
+  // Social Media (Postiz) section removed — not in use
   // Crawler section removed — built-in, no client config needed
   {
     id: "brand",

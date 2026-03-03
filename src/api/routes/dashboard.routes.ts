@@ -773,27 +773,7 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
         return;
       }
 
-      case 'social-media': {
-        const apiKey = await resolve('POSTIZ_API_KEY');
-        const baseUrl = await resolve('POSTIZ_BASE_URL') || 'https://app.postiz.com/api/v1';
-        if (!apiKey) {
-          res.json({ valid: false, message: 'Postiz API Key is required' });
-          return;
-        }
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 10000);
-        const resp = await fetch(`${baseUrl}/posts`, {
-          headers: { 'api-key': apiKey },
-          signal: controller.signal,
-        });
-        clearTimeout(timeout);
-        if (!resp.ok) {
-          res.json({ valid: false, message: `Postiz returned ${resp.status}` });
-          return;
-        }
-        res.json({ valid: true, message: 'Postiz API connection verified' });
-        return;
-      }
+
 
       case 'crawler': {
         const crawlerUrl = await resolve('CRAWLER_BASE_URL') || 'http://localhost:3001';

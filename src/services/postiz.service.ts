@@ -1,6 +1,5 @@
 import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
-import { settings } from './settings.service.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────
 
@@ -14,10 +13,10 @@ interface CreatePostData {
 // ── Service ─────────────────────────────────────────────────────────
 
 class PostizService {
-  /** Resolve the current base URL and headers from settings (with env fallback) */
+  /** Resolve the current base URL and headers from env */
   private async getConfig(): Promise<{ baseUrl: string; headers: Record<string, string> }> {
-    const apiKey = (await settings.get('POSTIZ_API_KEY')) ?? env.POSTIZ_API_KEY ?? '';
-    const baseUrl = (await settings.get('POSTIZ_BASE_URL')) ?? env.POSTIZ_BASE_URL;
+    const apiKey = env.POSTIZ_API_KEY ?? '';
+    const baseUrl = env.POSTIZ_BASE_URL;
     return {
       baseUrl,
       headers: {

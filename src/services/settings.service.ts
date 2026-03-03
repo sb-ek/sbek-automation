@@ -57,9 +57,7 @@ export const CONFIGURABLE_KEYS = [
   'GOOGLE_OAUTH_REFRESH_TOKEN',
   'GOOGLE_OAUTH_EMAIL',
 
-  // Postiz (social media)
-  'POSTIZ_API_KEY',
-  'POSTIZ_BASE_URL',
+  // Postiz removed — not in use
 
   // Crawler
   'CRAWLER_BASE_URL',
@@ -228,7 +226,6 @@ const FULLY_MASKED_KEYS = new Set([
   'GOOGLE_OAUTH_REFRESH_TOKEN',
   'WATI_API_KEY',
   'INTERAKT_API_KEY',
-  'POSTIZ_API_KEY',
 ]);
 
 function maskValue(key: string, value: string): string {
