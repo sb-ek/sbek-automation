@@ -703,12 +703,22 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
         const oauthRefreshToken = await resolve('GOOGLE_OAUTH_REFRESH_TOKEN');
 
         if (oauthClientId && oauthClientSecret && oauthRefreshToken) {
-          const oauth2Client = new google.auth.OAuth2(oauthClientId, oauthClientSecret);
-          oauth2Client.setCredentials({ refresh_token: oauthRefreshToken });
-          const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-          const profile = await gmail.users.getProfile({ userId: 'me' });
-          res.json({ valid: true, message: `Gmail API connected — sending as ${profile.data.emailAddress}` });
-          return;
+          try {
+            const oauth2Client = new google.auth.OAuth2(oauthClientId, oauthClientSecret);
+            oauth2Client.setCredentials({ refresh_token: oauthRefreshToken });
+            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+            const profile = await gmail.users.getProfile({ userId: 'me' });
+            res.json({ valid: true, message: `Gmail API connected — sending as ${profile.data.emailAddress}` });
+            return;
+          } catch (gmailErr: unknown) {
+            const detail =
+              (gmailErr as any)?.response?.data?.error_description ??
+              (gmailErr as any)?.response?.data?.error ??
+              (gmailErr instanceof Error ? gmailErr.message : 'Unknown error');
+            logger.error({ err: gmailErr }, 'Gmail API test connection failed');
+            res.json({ valid: false, message: `Gmail API: ${detail}` });
+            return;
+          }
         }
 
         // Fallback: SMTP
