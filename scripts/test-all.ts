@@ -89,11 +89,11 @@ async function testSheets() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Test 3: AI Text Generation (Gemini)
+// Test 3: AI Text Generation (OpenRouter)
 // ─────────────────────────────────────────────────────────────────────
 
 async function testAIText() {
-  console.log('\n━━━ 3. AI TEXT GENERATION (Gemini) ━━━');
+  console.log('\n━━━ 3. AI TEXT GENERATION (OpenRouter) ━━━');
   try {
     const { openai } = await import('../src/services/openai.service.js');
 
@@ -118,46 +118,24 @@ async function testAIText() {
 }
 
 // ─────────────────────────────────────────────────────────────────────
-// Test 4: AI Image Generation (Gemini)
+// Test 4: AI Image Generation (OpenRouter)
 // ─────────────────────────────────────────────────────────────────────
 
 async function testAIImage() {
-  console.log('\n━━━ 4. AI IMAGE GENERATION (Gemini) ━━━');
+  console.log('\n━━━ 4. AI IMAGE GENERATION (OpenRouter) ━━━');
   try {
-    const { GoogleGenAI } = await import('@google/genai');
-    const { writeFileSync, mkdirSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
+    const { nanobanana } = await import('../src/services/nanobanana.service.js');
 
-    const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
+    const result = await nanobanana.generateAndSave(
+      'Generate a product photo of a gold ring with diamond on white background, jewelry e-commerce style',
+      `test-all-${Date.now()}`,
+      { aspectRatio: '1:1' },
+    );
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-exp-image-generation',
-      contents: 'Generate a product photo of a gold ring with diamond on white background, jewelry e-commerce style',
-      config: { responseModalities: ['TEXT', 'IMAGE'] },
-    });
-
-    const parts = response.candidates?.[0]?.content?.parts || [];
-    let imageSaved = false;
-    for (const part of parts) {
-      if (part.inlineData) {
-        const outDir = resolve(process.cwd(), 'creatives/generated');
-        mkdirSync(outDir, { recursive: true });
-        const outPath = resolve(outDir, `test-all-${Date.now()}.png`);
-        writeFileSync(outPath, Buffer.from(part.inlineData.data!, 'base64'));
-        ok('Image Generation', outPath.split('/').slice(-2).join('/'));
-        imageSaved = true;
-      }
-    }
-    if (!imageSaved) {
-      fail('Image Generation', 'No image data in response');
-    }
+    ok('Image Generation', `${result.filePath.split('/').slice(-2).join('/')} (${Math.round(result.buffer.length / 1024)}KB)`);
   } catch (err: any) {
     const msg = err.message || JSON.stringify(err);
-    if (msg.includes('429')) {
-      fail('Image Generation', 'Quota exceeded — billing may not be active');
-    } else {
-      fail('Image Generation', msg.slice(0, 100));
-    }
+    fail('Image Generation', msg.slice(0, 100));
   }
 }
 

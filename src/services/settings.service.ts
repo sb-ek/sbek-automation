@@ -42,10 +42,7 @@ export const CONFIGURABLE_KEYS = [
   'SMTP_PASS',
   'EMAIL_FROM',
 
-  // OpenAI
-  'OPENAI_API_KEY',
-
-  // OpenRouter (text + image generation)
+  // OpenRouter (all AI — text + image generation)
   'OPENROUTER_API_KEY',
 
   // Google OAuth (alternative to service account)
@@ -216,7 +213,6 @@ const FULLY_MASKED_KEYS = new Set([
   'GOOGLE_PRIVATE_KEY',
   'WHATSAPP_ACCESS_TOKEN',
   'SMTP_PASS',
-  'OPENAI_API_KEY',
   'OPENROUTER_API_KEY',
   'GOOGLE_OAUTH_CLIENT_SECRET',
   'GOOGLE_OAUTH_REFRESH_TOKEN',

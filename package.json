@@ -23,7 +23,6 @@
   "dependencies": {
     "@bull-board/api": "^6.5.0",
     "@bull-board/express": "^6.5.0",
-    "@google/genai": "^1.43.0",
     "@types/mime": "^3.0.4",
     "@types/sharp": "^0.32.0",
     "@woocommerce/woocommerce-rest-api": "^1.0.1",

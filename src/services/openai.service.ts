@@ -12,26 +12,21 @@ class AIService {
   private cachedKey: string | null = null;
   private cachedModel: string | null = null;
   private cachedImageModel: string | null = null;
-  /** 'openrouter' or 'gemini' — determines baseURL and default models */
-  private cachedProvider: 'openrouter' | 'gemini' = 'openrouter';
   private cacheTime = 0;
   private readonly CACHE_TTL = 60_000; // 1 minute
 
   /**
-   * Fetch the API key and model settings. Priority:
-   *   1. OpenRouter key (uses openrouter.ai/api/v1)
-   *   2. Gemini key fallback (uses generativelanguage.googleapis.com)
+   * Fetch the OpenRouter API key and model settings.
+   * Priority: database override → settings service → env variable
    * Results are cached for CACHE_TTL milliseconds.
    */
-  private async getConfig(): Promise<{ apiKey: string; model: string; imageModel: string; provider: 'openrouter' | 'gemini' }> {
+  private async getConfig(): Promise<{ apiKey: string; model: string; imageModel: string }> {
     const now = Date.now();
     if (this.cachedKey && now - this.cacheTime < this.CACHE_TTL) {
-      const defaultModel = this.cachedProvider === 'openrouter' ? 'google/gemini-2.5-flash' : 'gemini-2.5-flash';
       return {
         apiKey: this.cachedKey,
-        model: this.cachedModel || defaultModel,
-        imageModel: this.cachedImageModel || defaultModel,
-        provider: this.cachedProvider,
+        model: this.cachedModel || 'google/gemini-2.5-flash',
+        imageModel: this.cachedImageModel || 'google/gemini-2.5-flash',
       };
     }
 
@@ -43,22 +38,14 @@ class AIService {
           inArray(systemConfig.key, [
             'openrouter_api_key',
             'openrouter_model',
-            'gemini_api_key',
-            'gemini_model',
           ]),
         );
 
       for (const row of rows) {
         if (row.key === 'openrouter_api_key') {
           this.cachedKey = row.value as string;
-          this.cachedProvider = 'openrouter';
         } else if (row.key === 'openrouter_model') {
           this.cachedModel = row.value as string;
-        }
-        // Gemini fallback: use gemini key if no openrouter key found
-        if (!this.cachedKey && row.key === 'gemini_api_key') {
-          this.cachedKey = row.value as string;
-          this.cachedProvider = 'gemini';
         }
       }
 
@@ -70,49 +57,26 @@ class AIService {
     // Also check the settings service (set via dashboard)
     if (!this.cachedKey) {
       const settingsKey = await settings.get('OPENROUTER_API_KEY');
-      if (settingsKey) { this.cachedKey = settingsKey; this.cachedProvider = 'openrouter'; }
-    }
-    if (!this.cachedKey) {
-      const settingsKey = await settings.get('OPENAI_API_KEY');
-      if (settingsKey) { this.cachedKey = settingsKey; this.cachedProvider = 'openrouter'; }
+      if (settingsKey) { this.cachedKey = settingsKey; }
     }
 
-    // Final fallback to env vars
-    if (!this.cachedKey) {
-      if (env.OPENROUTER_API_KEY) {
-        this.cachedKey = env.OPENROUTER_API_KEY;
-        this.cachedProvider = 'openrouter';
-      } else if (env.GEMINI_API_KEY) {
-        this.cachedKey = env.GEMINI_API_KEY;
-        this.cachedProvider = 'gemini';
-      } else if (env.OPENAI_API_KEY) {
-        this.cachedKey = env.OPENAI_API_KEY;
-        this.cachedProvider = 'openrouter';
-      }
+    // Final fallback to env var
+    if (!this.cachedKey && env.OPENROUTER_API_KEY) {
+      this.cachedKey = env.OPENROUTER_API_KEY;
     }
 
-    const defaultModel = this.cachedProvider === 'openrouter' ? 'google/gemini-2.5-flash' : 'gemini-2.5-flash';
     return {
       apiKey: this.cachedKey || '',
-      model: this.cachedModel || defaultModel,
-      imageModel: this.cachedImageModel || defaultModel,
-      provider: this.cachedProvider,
+      model: this.cachedModel || 'google/gemini-2.5-flash',
+      imageModel: this.cachedImageModel || 'google/gemini-2.5-flash',
     };
   }
 
   /**
-   * Build an OpenAI-compatible client. Uses OpenRouter when available,
-   * falls back to Gemini's OpenAI-compatible endpoint.
+   * Build an OpenAI-compatible client pointing to OpenRouter.
    */
   private async getClient(): Promise<OpenAI> {
     const config = await this.getConfig();
-
-    if (config.provider === 'gemini') {
-      return new OpenAI({
-        apiKey: config.apiKey,
-        baseURL: 'https://generativelanguage.googleapis.com/v1beta/openai/',
-      });
-    }
 
     return new OpenAI({
       apiKey: config.apiKey,

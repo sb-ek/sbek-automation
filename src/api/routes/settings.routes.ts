@@ -29,7 +29,7 @@ settingsRouter.get('/', async (_req: Request, res: Response) => {
  * PUT /admin/settings
  * Update one or more API keys / settings.
  *
- * Body: { "keys": { "OPENAI_API_KEY": "sk-...", "GEMINI_API_KEY": "AIza..." } }
+ * Body: { "keys": { "OPENROUTER_API_KEY": "sk-or-v1-..." } }
  *
  * Pass `null` for a value to remove the DB override and fall back to the env var.
  */

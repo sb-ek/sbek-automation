@@ -40,13 +40,7 @@ const envSchema = z.object({
   SMTP_PASS: z.string().min(1).optional(),
   EMAIL_FROM: z.string().min(1).optional(),
 
-  // ── OpenAI ─────────────────────────────────────────────
-  OPENAI_API_KEY: z.string().min(1).optional(),
-
-  // ── Gemini / Nano Banana (image generation) ──────────
-  GEMINI_API_KEY: z.string().min(1).optional(),
-
-  // ── OpenRouter (text generation) ────────────────────
+  // ── OpenRouter (all AI — text + image generation) ────
   OPENROUTER_API_KEY: z.string().min(1).optional(),
 
   // ── Google OAuth (alternative to service account) ───
