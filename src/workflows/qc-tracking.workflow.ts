@@ -23,6 +23,14 @@ const DEFAULT_CHECKLIST = [
  */
 export async function createQCChecklist(payload: QCCheckPayload): Promise<void> {
   const { orderId, productName, checklistItems } = payload;
+
+  // Prevent duplicate QC checklists for the same order
+  const existingItems = await sheets.getQCItems(String(orderId));
+  if (existingItems && existingItems.length > 0) {
+    logger.info({ orderId, existingCount: existingItems.length }, 'QC checklist already exists, skipping');
+    return;
+  }
+
   const items = checklistItems.length > 0 ? checklistItems : DEFAULT_CHECKLIST;
 
   logger.info({ orderId, itemCount: items.length }, 'Creating QC checklist');

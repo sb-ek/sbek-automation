@@ -54,6 +54,8 @@ webhooksRouter.post(
         {
           // Deduplicate rapid webhook fires for the same order+event
           jobId: `order-${orderId}-${event}`,
+          // Delay order.updated so order.created finishes first (prevents duplicate rows)
+          delay: event === 'order.updated' ? 5000 : 0,
         }
       );
 
