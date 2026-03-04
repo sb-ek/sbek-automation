@@ -141,13 +141,32 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
     });
   }
 
-  // 4. Upsert customer record
+  // 4. Upsert customer record with order totals
   if (parsed.email) {
+    // Calculate total orders and total spend for this customer
+    let totalOrders = 1;
+    let totalSpend = parseFloat(parsed.amount) || 0;
+    try {
+      const allOrders = await sheets.getAllOrders();
+      const customerOrders = allOrders.filter(
+        (o) => o['Email'] === parsed.email && o['Order ID'] !== String(parsed.orderId),
+      );
+      totalOrders = customerOrders.length + 1;
+      totalSpend = customerOrders.reduce(
+        (sum, o) => sum + (parseFloat(o['Amount']) || 0),
+        totalSpend,
+      );
+    } catch (err) {
+      logger.warn({ err }, 'Could not calculate customer totals');
+    }
+
     await sheets.upsertCustomer({
       'Customer ID': customerId,
       'Name': parsed.customerName,
       'Email': parsed.email,
       'Phone': parsed.phone,
+      'Total Orders': String(totalOrders),
+      'Total Spend': String(totalSpend),
       'Last Order Date': parsed.orderDate,
       'Tags': '',
       'Notes': '',
