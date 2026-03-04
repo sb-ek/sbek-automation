@@ -97,6 +97,14 @@ webhooksRouter.post(
     try {
       const topic = req.headers['x-wc-webhook-topic'] as string;
       const payload = req.body;
+
+      // WooCommerce sends a ping on webhook creation/save — acknowledge it.
+      if (!topic || topic === 'action.woocommerce_webhook_payload' || (!payload?.id && payload?.webhook_id)) {
+        logger.info({ topic }, 'WooCommerce product webhook ping acknowledged');
+        res.json({ received: true, type: 'ping' });
+        return;
+      }
+
       const productId = payload?.id;
       const productName = payload?.name || '';
 
