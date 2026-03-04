@@ -711,11 +711,14 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
             res.json({ valid: true, message: `Gmail API connected — sending as ${profile.data.emailAddress}` });
             return;
           } catch (gmailErr: unknown) {
+            const data = (gmailErr as any)?.response?.data;
             const detail =
-              (gmailErr as any)?.response?.data?.error_description ??
-              (gmailErr as any)?.response?.data?.error ??
-              (gmailErr instanceof Error ? gmailErr.message : 'Unknown error');
-            logger.error({ err: gmailErr }, 'Gmail API test connection failed');
+              (typeof data?.error_description === 'string' ? data.error_description : null) ??
+              (typeof data?.error === 'string' ? data.error : null) ??
+              (data?.error?.message) ??
+              (typeof data === 'string' ? data : null) ??
+              (gmailErr instanceof Error ? gmailErr.message : JSON.stringify(data ?? gmailErr));
+            logger.error({ err: gmailErr, responseData: data }, 'Gmail API test connection failed');
             res.json({ valid: false, message: `Gmail API: ${detail}` });
             return;
           }
