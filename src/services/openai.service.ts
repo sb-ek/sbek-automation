@@ -26,7 +26,7 @@ class AIService {
       return {
         apiKey: this.cachedKey,
         model: this.cachedModel || 'google/gemini-2.5-flash',
-        imageModel: this.cachedImageModel || 'google/gemini-2.5-flash',
+        imageModel: this.cachedImageModel || 'google/gemini-3-pro-image-preview',
       };
     }
 
@@ -38,6 +38,7 @@ class AIService {
           inArray(systemConfig.key, [
             'openrouter_api_key',
             'openrouter_model',
+            'openrouter_image_model',
           ]),
         );
 
@@ -46,6 +47,8 @@ class AIService {
           this.cachedKey = row.value as string;
         } else if (row.key === 'openrouter_model') {
           this.cachedModel = row.value as string;
+        } else if (row.key === 'openrouter_image_model') {
+          this.cachedImageModel = row.value as string;
         }
       }
 
@@ -68,7 +71,7 @@ class AIService {
     return {
       apiKey: this.cachedKey || '',
       model: this.cachedModel || 'google/gemini-2.5-flash',
-      imageModel: this.cachedImageModel || 'google/gemini-2.5-flash',
+      imageModel: this.cachedImageModel || 'google/gemini-3-pro-image-preview',
     };
   }
 
@@ -138,41 +141,62 @@ class AIService {
   // ── Image Generation ───────────────────────────────────────────────────
 
   /**
-   * Generate an image with the configured image model and return its URL.
+   * Generate an image via OpenRouter's chat completions endpoint with
+   * modalities: ["image", "text"]. Returns the base64 data URI of the image.
    */
   async generateImage(
     prompt: string,
     options?: {
-      size?: '1024x1024' | '1024x1792' | '1792x1024';
-      quality?: 'standard' | 'hd';
+      aspectRatio?: string;
+      imageSize?: string;
     },
   ): Promise<string> {
     const config = await this.getConfig();
-    const client = await this.getClient();
 
     logger.info({ model: config.imageModel, provider: 'openrouter' }, 'Starting AI image generation');
 
-    const response = await client.images.generate({
+    const body = {
       model: config.imageModel,
-      prompt,
-      size: options?.size ?? '1024x1024',
-      quality: options?.quality ?? 'standard',
-      n: 1,
+      messages: [{ role: 'user', content: prompt }],
+      modalities: ['image', 'text'],
+      image_config: {
+        aspect_ratio: options?.aspectRatio ?? '1:1',
+        image_size: options?.imageSize ?? '2K',
+      },
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://sbek.com',
+        'X-Title': 'SBEK Automation',
+      },
+      body: JSON.stringify(body),
     });
 
-    const imageUrl = response.data?.[0]?.url ?? '';
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter image generation failed (${response.status}): ${errorText.slice(0, 500)}`);
+    }
 
-    logger.info(
-      {
-        model: config.imageModel,
-        provider: 'openrouter',
-        size: options?.size ?? '1024x1024',
-        quality: options?.quality ?? 'standard',
-      },
-      'AI image generation completed',
-    );
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await response.json();
+    const message = data?.choices?.[0]?.message;
 
-    return imageUrl;
+    // Extract image URL from response
+    if (message?.images?.[0]?.image_url?.url) {
+      return message.images[0].image_url.url;
+    }
+
+    // Fallback: inline data URI in content
+    const content: string = message?.content ?? '';
+    const match = content.match(/data:image\/\w+;base64,[A-Za-z0-9+/=]+/);
+    if (match) return match[0];
+
+    logger.warn({ content: content.slice(0, 200) }, 'No image found in OpenRouter response');
+    return '';
   }
 
   // ── SEO Meta Generation ────────────────────────────────────────────────

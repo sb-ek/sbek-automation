@@ -1,4 +1,3 @@
-import OpenAI from 'openai';
 import { writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { env } from '../config/env.js';
@@ -8,7 +7,7 @@ import { settings } from './settings.service.js';
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type AspectRatio = '1:1' | '9:16' | '16:9' | '4:3' | '3:4';
-export type ImageSize = '1K' | '2K' | '4K';
+export type ImageSize = '0.5K' | '1K' | '2K' | '4K';
 
 export interface NanoBananaOptions {
   /** Aspect ratio of the generated image. Default: '1:1' */
@@ -30,146 +29,57 @@ export interface GeneratedImage {
   filePath: string;
 }
 
-// ── Aspect ratio → OpenAI size mapping ──────────────────────────────────────
-
-const ASPECT_TO_SIZE: Record<AspectRatio, '1024x1024' | '1024x1792' | '1792x1024'> = {
-  '1:1': '1024x1024',
-  '9:16': '1024x1792',
-  '16:9': '1792x1024',
-  '4:3': '1024x1024',
-  '3:4': '1024x1792',
-};
-
 // ── Service ────────────────────────────────────────────────────────────────
 
 class NanoBananaService {
-  private client: OpenAI | null = null;
-  private readonly imageModel = 'google/gemini-2.0-flash-exp:free';
+  /**
+   * OpenRouter image generation model.
+   * Uses Gemini 3 Pro Image Preview (Nano Banana Pro) — the most advanced
+   * image model on OpenRouter with best multimodal quality.
+   */
+  private readonly imageModel = 'google/gemini-3-pro-image-preview';
   private readonly outputDir: string;
-  private currentKey = '';
 
   constructor() {
-    const apiKey = env.OPENROUTER_API_KEY;
-    if (apiKey) {
-      this.client = new OpenAI({
-        apiKey,
-        baseURL: 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': 'https://sbek.com',
-          'X-Title': 'SBEK Automation',
-        },
-      });
-      this.currentKey = apiKey;
-    }
     this.outputDir = join(process.cwd(), 'creatives', 'generated');
   }
 
   /**
-   * Re-initialize the OpenRouter client if the API key has changed in settings.
+   * Refresh the API key from settings/env.
    */
-  async refreshClient(): Promise<void> {
-    const key = (await settings.get('OPENROUTER_API_KEY')) ?? env.OPENROUTER_API_KEY ?? '';
-    if (key && key !== this.currentKey) {
-      this.client = new OpenAI({
-        apiKey: key,
-        baseURL: 'https://openrouter.ai/api/v1',
-        defaultHeaders: {
-          'HTTP-Referer': 'https://sbek.com',
-          'X-Title': 'SBEK Automation',
-        },
-      });
-      this.currentKey = key;
-      logger.info('OpenRouter image client re-created with updated API key');
-    } else if (!key) {
-      this.client = null;
-      this.currentKey = '';
-    }
+  private async getApiKey(): Promise<string> {
+    return (await settings.get('OPENROUTER_API_KEY')) ?? env.OPENROUTER_API_KEY ?? '';
   }
 
   /**
-   * Generate an image using OpenRouter's image generation endpoint.
+   * Generate an image using OpenRouter's chat completions endpoint
+   * with modalities: ["image", "text"] and image_config.
    *
-   * Supports:
-   * - Text-only prompts (generate from scratch)
-   * - Multiple aspect ratios mapped to standard sizes
-   *
-   * Returns a GeneratedImage with the raw buffer.
+   * This is the correct OpenRouter image generation API — NOT images.generate.
    */
   async generateImage(
     prompt: string,
     options: NanoBananaOptions = {},
   ): Promise<GeneratedImage> {
-    await this.refreshClient();
-    if (!this.client) {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
       throw new Error('Image generation: OPENROUTER_API_KEY is not configured. Set it via Settings or .env');
     }
 
-    const { aspectRatio = '1:1' } = options;
-    const size = ASPECT_TO_SIZE[aspectRatio] ?? '1024x1024';
+    const {
+      aspectRatio = '1:1',
+      imageSize = '2K',
+      referenceImageBase64,
+      referenceImageMimeType = 'image/jpeg',
+    } = options;
 
     logger.info(
-      { prompt: prompt.slice(0, 120), aspectRatio, size },
+      { prompt: prompt.slice(0, 120), model: this.imageModel, aspectRatio, imageSize },
       'OpenRouter image generation starting',
     );
 
-    // Use OpenAI-compatible images.generate endpoint via OpenRouter
-    try {
-      const response = await this.client.images.generate({
-        model: this.imageModel,
-        prompt,
-        size,
-        n: 1,
-        response_format: 'b64_json',
-      });
-
-      const imageData = response.data?.[0];
-      if (imageData?.b64_json) {
-        const buffer = Buffer.from(imageData.b64_json, 'base64');
-        const mimeType = 'image/png';
-        logger.info(
-          { mimeType, sizeKb: Math.round(buffer.length / 1024) },
-          'Image generated via OpenRouter',
-        );
-        return { buffer, mimeType, filePath: '' };
-      }
-
-      // Fallback: if URL is returned instead of b64
-      if (imageData?.url) {
-        const imgRes = await fetch(imageData.url);
-        if (!imgRes.ok) throw new Error(`Failed to download image: ${imgRes.status}`);
-        const arrayBuf = await imgRes.arrayBuffer();
-        const buffer = Buffer.from(arrayBuf);
-        const mimeType = imgRes.headers.get('content-type') || 'image/png';
-        logger.info(
-          { mimeType, sizeKb: Math.round(buffer.length / 1024) },
-          'Image generated via OpenRouter (URL download)',
-        );
-        return { buffer, mimeType, filePath: '' };
-      }
-
-      throw new Error('No image data in OpenRouter response');
-    } catch (err) {
-      // Fallback: use chat completion with image generation model
-      logger.warn({ err }, 'images.generate failed, trying chat completion with image model');
-      return this.generateImageViaChatCompletion(prompt, options);
-    }
-  }
-
-  /**
-   * Fallback: Generate image using chat completions with a vision/image model.
-   * Some OpenRouter models return images inline via chat completions.
-   */
-  private async generateImageViaChatCompletion(
-    prompt: string,
-    options: NanoBananaOptions = {},
-  ): Promise<GeneratedImage> {
-    if (!this.client) {
-      throw new Error('Image generation: OPENROUTER_API_KEY is not configured');
-    }
-
-    const { referenceImageBase64, referenceImageMimeType = 'image/jpeg' } = options;
-
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [];
+    // Build messages — with optional reference image for style-transfer
+    const messages: Array<Record<string, unknown>> = [];
 
     if (referenceImageBase64) {
       messages.push({
@@ -190,29 +100,104 @@ class NanoBananaService {
     } else {
       messages.push({
         role: 'user',
-        content: `Generate an image: ${prompt}`,
+        content: prompt,
       });
     }
 
-    const response = await this.client.chat.completions.create({
-      model: 'google/gemini-2.0-flash-exp:free',
+    // OpenRouter image generation uses chat completions with modalities + image_config
+    const body = {
+      model: this.imageModel,
       messages,
+      modalities: ['image', 'text'],
+      image_config: {
+        aspect_ratio: aspectRatio,
+        image_size: imageSize,
+      },
+    };
+
+    const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'HTTP-Referer': 'https://sbek.com',
+        'X-Title': 'SBEK Automation',
+      },
+      body: JSON.stringify(body),
     });
 
-    // Check if response contains image data
-    const content = response.choices[0]?.message?.content ?? '';
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`OpenRouter image generation failed (${response.status}): ${errorText.slice(0, 500)}`);
+    }
 
-    // Some models return base64 image data inline
-    const base64Match = content.match(/data:image\/(\w+);base64,([A-Za-z0-9+/=]+)/);
-    if (base64Match) {
-      const mimeType = `image/${base64Match[1]}`;
-      const buffer = Buffer.from(base64Match[2], 'base64');
-      logger.info({ mimeType, sizeKb: Math.round(buffer.length / 1024) }, 'Image extracted from chat completion');
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const data: any = await response.json();
+    const message = data?.choices?.[0]?.message;
+
+    if (!message) {
+      throw new Error('OpenRouter image generation: empty response — no choices returned');
+    }
+
+    // Method 1: Images in message.images array (standard OpenRouter format)
+    if (message.images && Array.isArray(message.images) && message.images.length > 0) {
+      const imageUrl: string = message.images[0]?.image_url?.url ?? '';
+      const extracted = this.extractBase64Image(imageUrl);
+      if (extracted) {
+        logger.info(
+          { mimeType: extracted.mimeType, sizeKb: Math.round(extracted.buffer.length / 1024) },
+          'Image generated via OpenRouter (images array)',
+        );
+        return { ...extracted, filePath: '' };
+      }
+    }
+
+    // Method 2: Image inline in content as data URI
+    const content: string = message.content ?? '';
+    const dataUriMatch = content.match(/data:image\/(\w+);base64,([A-Za-z0-9+/=]+)/);
+    if (dataUriMatch) {
+      const mimeType = `image/${dataUriMatch[1]}`;
+      const buffer = Buffer.from(dataUriMatch[2], 'base64');
+      logger.info(
+        { mimeType, sizeKb: Math.round(buffer.length / 1024) },
+        'Image generated via OpenRouter (inline data URI)',
+      );
       return { buffer, mimeType, filePath: '' };
     }
 
-    // If no image in response, generate a placeholder error
-    throw new Error('Image generation: model did not return image data. Response: ' + content.slice(0, 200));
+    // Method 3: Content parts with image_url type
+    if (Array.isArray(message.content)) {
+      for (const part of message.content) {
+        if (part.type === 'image_url' && part.image_url?.url) {
+          const extracted = this.extractBase64Image(part.image_url.url);
+          if (extracted) {
+            logger.info(
+              { mimeType: extracted.mimeType, sizeKb: Math.round(extracted.buffer.length / 1024) },
+              'Image generated via OpenRouter (content parts)',
+            );
+            return { ...extracted, filePath: '' };
+          }
+        }
+      }
+    }
+
+    throw new Error(
+      'Image generation: no image data in OpenRouter response. Content: ' +
+        (typeof content === 'string' ? content.slice(0, 300) : JSON.stringify(content).slice(0, 300)),
+    );
+  }
+
+  /**
+   * Extract base64 image data from a data URI string.
+   */
+  private extractBase64Image(dataUri: string): { buffer: Buffer; mimeType: string } | null {
+    if (!dataUri || !dataUri.startsWith('data:image/')) return null;
+    const match = dataUri.match(/^data:(image\/\w+);base64,(.+)$/s);
+    if (!match) return null;
+    return {
+      mimeType: match[1],
+      buffer: Buffer.from(match[2], 'base64'),
+    };
   }
 
   /**

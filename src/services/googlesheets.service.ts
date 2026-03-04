@@ -274,12 +274,23 @@ class GoogleSheetsService {
     }
   }
 
-  /** Append a new row to the Orders tab. */
+  /** Append a new row to the Orders tab (with dedup — skips if Order ID exists). */
   async appendOrder(data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
       const sheet = this.getSheet(TAB_NAMES.ORDERS);
       if (!sheet) return;
+
+      // Dedup: check if this Order ID already exists
+      const orderId = data['Order ID'];
+      if (orderId) {
+        const rows = await sheet.getRows();
+        const exists = rows.some((r) => r.get('Order ID') === sanitizeForSheets(orderId));
+        if (exists) {
+          logger.info({ orderId }, 'Order already exists in sheet — skipping append');
+          return;
+        }
+      }
 
       const sanitized = sanitizeRow(data);
       await sheet.addRow(sanitized);
@@ -365,12 +376,23 @@ class GoogleSheetsService {
 
   // ── Production tab ──────────────────────────────────────────────────────
 
-  /** Add a new row to the Production tab. */
+  /** Add a new row to the Production tab (with dedup — skips if Order ID exists). */
   async appendProductionTask(data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
       const sheet = this.getSheet(TAB_NAMES.PRODUCTION);
       if (!sheet) return;
+
+      // Dedup: check if a production task for this Order ID already exists
+      const orderId = data['Order ID'];
+      if (orderId) {
+        const rows = await sheet.getRows();
+        const exists = rows.some((r) => r.get('Order ID') === sanitizeForSheets(orderId));
+        if (exists) {
+          logger.info({ orderId }, 'Production task already exists — skipping append');
+          return;
+        }
+      }
 
       const sanitized = sanitizeRow(data);
       await sheet.addRow(sanitized);
@@ -582,12 +604,28 @@ class GoogleSheetsService {
 
   // ── Creatives tab ───────────────────────────────────────────────────────
 
-  /** Add a new creative row. */
+  /** Add a new creative row (with dedup — skips if Product ID + Variant exists). */
   async appendCreative(data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
       const sheet = this.getSheet(TAB_NAMES.CREATIVES);
       if (!sheet) return;
+
+      // Dedup: check if this Product ID + Variant combo already exists
+      const productId = data['Product ID'];
+      const variant = data['Variant'];
+      if (productId && variant) {
+        const rows = await sheet.getRows();
+        const exists = rows.some(
+          (r) =>
+            r.get('Product ID') === sanitizeForSheets(productId) &&
+            r.get('Variant') === sanitizeForSheets(variant),
+        );
+        if (exists) {
+          logger.info({ productId, variant }, 'Creative already exists — skipping append');
+          return;
+        }
+      }
 
       const sanitized = sanitizeRow(data);
       await sheet.addRow(sanitized);
@@ -679,12 +717,23 @@ class GoogleSheetsService {
     }
   }
 
-  /** Add a new competitor row. */
+  /** Add a new competitor row (with dedup — skips if Name already exists). */
   async appendCompetitor(data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
       const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
       if (!sheet) return;
+
+      // Dedup: check if competitor with this name already exists
+      const name = data['Name'];
+      if (name) {
+        const rows = await sheet.getRows();
+        const exists = rows.some((r) => r.get('Name') === sanitizeForSheets(name));
+        if (exists) {
+          logger.info({ name }, 'Competitor already exists — skipping append');
+          return;
+        }
+      }
 
       const sanitized = sanitizeRow(data);
       await sheet.addRow(sanitized);

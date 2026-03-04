@@ -318,8 +318,8 @@ function generateSystemConfig() {
     { key: 'brand_support_phone', value: '+919999999999' },
     { key: 'brand_support_email', value: 'support@sbek.com' },
     { key: 'review_url', value: 'https://sbek.com/reviews' },
-    { key: 'openrouter_model', value: 'openai/gpt-4o' },
-    { key: 'openrouter_image_model', value: 'openai/dall-e-3' },
+    { key: 'openrouter_model', value: 'google/gemini-2.5-flash' },
+    { key: 'openrouter_image_model', value: 'google/gemini-3-pro-image-preview' },
   ];
 }
 
@@ -338,7 +338,7 @@ export async function seedDemoData(db: NodePgDatabase<any>): Promise<string> {
 
   // Only delete non-credential config entries — preserve user API keys/secrets
   const demoConfigKeys = generateSystemConfig().map((c) => c.key);
-  const safeToDelete = demoConfigKeys.filter((k) => !CONFIGURABLE_KEYS.includes(k));
+  const safeToDelete = demoConfigKeys.filter((k) => !(CONFIGURABLE_KEYS as readonly string[]).includes(k));
   if (safeToDelete.length > 0) {
     await db.delete(systemConfig).where(inArray(systemConfig.key, safeToDelete));
   }

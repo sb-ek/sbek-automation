@@ -66,8 +66,20 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
   // 2. Check if order already exists
   const existingRow = await sheets.findOrderRow(String(orderId));
 
-  if (!existingRow && event === 'order.created') {
-    // 3a. New order -- append to Sheets
+  if (existingRow !== null) {
+    // 3a. Existing order -- update status and notes
+    await sheets.updateOrder(String(orderId), {
+      'Status': mapWooStatusToSheetStatus(parsed.status),
+      'Notes': parsed.notes || '',
+      'Last Updated': formatDate(new Date()),
+    });
+
+    logger.info({ orderId, status: parsed.status }, 'Order updated in Sheets');
+  } else {
+    // 3b. New order (regardless of event type) -- append to Sheets
+    // appendOrder has built-in dedup so this is safe even if called twice
+    const status = event === 'order.created' ? 'New' : mapWooStatusToSheetStatus(parsed.status);
+
     await sheets.appendOrder({
       'Order ID': String(parsed.orderId),
       'Customer Name': parsed.customerName,
@@ -82,16 +94,16 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
       'Amount': parsed.amount,
       'Order Date': parsed.orderDate,
       'Promised Delivery': promisedDelivery,
-      'Status': 'New',
+      'Status': status,
       'Production Assignee': '',
       'Notes': '',
       'Last Updated': formatDate(new Date()),
     });
 
-    logger.info({ orderId }, 'New order added to Sheets');
+    logger.info({ orderId, status }, 'New order added to Sheets');
 
-    // Send order confirmation notification
-    if (parsed.phone || parsed.email) {
+    // Send order confirmation notification (only for genuinely new orders)
+    if (event === 'order.created' && (parsed.phone || parsed.email)) {
       await notification.add(`notify-order-${orderId}`, {
         channel: 'both',
         recipientPhone: parsed.phone ? normalizePhone(parsed.phone) : undefined,
@@ -109,36 +121,6 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
         },
       }, { jobId: `notify-order-confirm-${orderId}` });
     }
-  } else if (existingRow) {
-    // 3b. Existing order -- update
-    await sheets.updateOrder(String(orderId), {
-      'Status': mapWooStatusToSheetStatus(parsed.status),
-      'Notes': parsed.notes || '',
-      'Last Updated': formatDate(new Date()),
-    });
-
-    logger.info({ orderId, status: parsed.status }, 'Order updated in Sheets');
-  } else {
-    // order.updated but we don't have the row yet -- create it
-    await sheets.appendOrder({
-      'Order ID': String(parsed.orderId),
-      'Customer Name': parsed.customerName,
-      'Phone': parsed.phone,
-      'Email': parsed.email,
-      'Product': parsed.products,
-      'Variant': parsed.variantDetails,
-      'Size': size,
-      'Metal': metal,
-      'Stones': stones,
-      'Engraving': engraving,
-      'Amount': parsed.amount,
-      'Order Date': parsed.orderDate,
-      'Promised Delivery': promisedDelivery,
-      'Status': mapWooStatusToSheetStatus(parsed.status),
-      'Production Assignee': '',
-      'Notes': '',
-      'Last Updated': formatDate(new Date()),
-    });
   }
 
   // 4. Upsert customer record with order totals
