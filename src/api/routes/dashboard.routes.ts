@@ -706,9 +706,10 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
           try {
             const oauth2Client = new google.auth.OAuth2(oauthClientId, oauthClientSecret);
             oauth2Client.setCredentials({ refresh_token: oauthRefreshToken });
-            const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-            const profile = await gmail.users.getProfile({ userId: 'me' });
-            res.json({ valid: true, message: `Gmail API connected — sending as ${profile.data.emailAddress}` });
+            const { token } = await oauth2Client.getAccessToken();
+            if (!token) throw new Error('Failed to obtain access token');
+            const emailFrom = await resolve('EMAIL_FROM');
+            res.json({ valid: true, message: `Gmail API connected${emailFrom ? ` — sending as ${emailFrom}` : ''}` });
             return;
           } catch (gmailErr: unknown) {
             const data = (gmailErr as any)?.response?.data;

@@ -249,9 +249,8 @@ class EmailService {
 
         const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
         oauth2Client.setCredentials({ refresh_token: refreshToken });
-
-        const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-        await gmail.users.getProfile({ userId: 'me' });
+        const { token } = await oauth2Client.getAccessToken();
+        if (!token) throw new Error('Failed to obtain access token');
         logger.info('Gmail API connection verified');
         return { ok: true, via: 'gmail-api' };
       } catch (error) {
