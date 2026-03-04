@@ -131,7 +131,16 @@ authRouter.get('/google/callback', async (req, res) => {
 authRouter.get('/google/status', async (_req, res) => {
   try {
     const refreshToken = await settings.get('GOOGLE_OAUTH_REFRESH_TOKEN');
-    const email = await settings.get('GOOGLE_OAUTH_EMAIL');
+    let email = await settings.get('GOOGLE_OAUTH_EMAIL');
+
+    // Fallback: extract email from EMAIL_FROM (e.g. "SBEK <reserve@sbek.in>" → "reserve@sbek.in")
+    if (!email && refreshToken) {
+      const emailFrom = await settings.get('EMAIL_FROM');
+      if (emailFrom) {
+        const match = emailFrom.match(/<(.+?)>/);
+        email = match ? match[1] : emailFrom;
+      }
+    }
 
     res.json({
       connected: !!refreshToken,
