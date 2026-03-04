@@ -28,33 +28,38 @@ export async function processContentGeneration(
   // Ensure Google Sheets is initialised
   await sheets.init();
 
-  switch (type) {
-    case 'seo_meta':
-      await handleSEOMeta(productId, productName);
-      break;
+  try {
+    switch (type) {
+      case 'seo_meta':
+        await handleSEOMeta(productId, productName);
+        break;
 
-    case 'faq':
-      await handleFAQ(productId, productName);
-      break;
+      case 'faq':
+        await handleFAQ(productId, productName);
+        break;
 
-    case 'aeo_kb':
-      await handleAEOKnowledgeBase(productId, productName);
-      break;
+      case 'aeo_kb':
+        await handleAEOKnowledgeBase(productId, productName);
+        break;
 
-    case 'comparison':
-      await handleComparison(productId, productName);
-      break;
+      case 'comparison':
+        await handleComparison(productId, productName);
+        break;
 
-    case 'schema_inject':
-      await handleSchemaInjection(productId, productName);
-      break;
+      case 'schema_inject':
+        await handleSchemaInjection(productId, productName);
+        break;
 
-    case 'internal_links':
-      await handleInternalLinks(productId, productName);
-      break;
+      case 'internal_links':
+        await handleInternalLinks(productId, productName);
+        break;
 
-    default:
-      logger.warn({ type, productId }, 'Unknown content generation type');
+      default:
+        logger.warn({ type, productId }, 'Unknown content generation type');
+    }
+  } catch (err) {
+    logger.error({ err, type, productId, productName }, `Content generation handler "${type}" failed`);
+    throw err; // Re-throw so BullMQ records the failure
   }
 
   // Ping search engines to re-crawl sitemap after any content update

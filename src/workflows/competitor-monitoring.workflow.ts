@@ -99,7 +99,7 @@ export async function processCompetitorCrawl(
       return;
     }
 
-    await notification.add(`competitor-alert-${competitorName}-${Date.now()}`, {
+    await notification.add(`competitor-alert-${competitorName}`, {
       channel: 'whatsapp',
       recipientPhone: adminPhone,
       recipientName: 'SBEK Admin',
@@ -108,7 +108,7 @@ export async function processCompetitorCrawl(
         order_id: competitorName,
         failed_items: `Significant changes detected on ${competitorName}. Check System Logs for full analysis.`,
       },
-    });
+    }, { jobId: `competitor-alert-${competitorName}` });
   }
 
   logger.info({ competitorName, url }, 'Competitor monitoring workflow completed');

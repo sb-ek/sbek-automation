@@ -199,7 +199,7 @@ class WooCommerceService {
   }
 
   async listOrders(
-    params?: { status?: string; per_page?: number; page?: number },
+    params?: { status?: string; per_page?: number; page?: number; after?: string },
   ): Promise<WooOrder[]> {
     try {
       const api = await this.getApi();
@@ -310,7 +310,8 @@ class WooCommerceService {
 
   async getCustomer(customerId: number): Promise<WooCustomer> {
     try {
-      const response = await this.api.get(`customers/${customerId}`);
+      const api = await this.getApi();
+      const response = await api.get(`customers/${customerId}`);
       return response.data as WooCustomer;
     } catch (error) {
       logger.error({ err: error, customerId }, 'Failed to fetch WooCommerce customer');
@@ -322,7 +323,8 @@ class WooCommerceService {
     params?: { per_page?: number; page?: number },
   ): Promise<WooCustomer[]> {
     try {
-      const response = await this.api.get('customers', params ?? {});
+      const api = await this.getApi();
+      const response = await api.get('customers', params ?? {});
       return response.data as WooCustomer[];
     } catch (error) {
       logger.error({ err: error, params }, 'Failed to list WooCommerce customers');

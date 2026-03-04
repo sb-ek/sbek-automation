@@ -2,6 +2,8 @@ import { logger } from '../../config/logger.js';
 import { woocommerce } from '../../services/woocommerce.service.js';
 import { orderSync } from '../../queues/registry.js';
 
+const MAX_PAGES = 20; // Safety cap to prevent infinite pagination
+
 /**
  * Daily cron: full reconciliation sync.
  * Pulls recent orders from WooCommerce and enqueues sync jobs
@@ -16,18 +18,16 @@ export async function runDailySheetsSync(): Promise<void> {
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
 
   try {
-    while (true) {
+    while (page <= MAX_PAGES) {
       const orders = await woocommerce.listOrders({
         per_page: 50,
         page,
+        after: threeDaysAgo.toISOString(),
       });
 
       if (!orders || orders.length === 0) break;
 
       for (const order of orders) {
-        const orderDate = new Date(order.date_created);
-        if (orderDate < threeDaysAgo) continue;
-
         await orderSync.add(`sync-${order.id}`, {
           orderId: order.id,
           event: 'order.updated',
@@ -38,6 +38,10 @@ export async function runDailySheetsSync(): Promise<void> {
 
       if (orders.length < 50) break;
       page++;
+    }
+
+    if (page > MAX_PAGES) {
+      logger.warn({ maxPages: MAX_PAGES }, 'Daily sync hit page limit — some orders may not have been synced');
     }
   } catch (err) {
     logger.error({ err }, 'Daily sheets sync failed during fetch');

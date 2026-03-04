@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { useQueues, useStats } from "@/lib/hooks";
 import type { QueueItem } from "@/lib/hooks";
 import { PageHeader } from "@/components/page-header";
 import { StatusDot } from "@/components/status-dot";
 import { formatNumber } from "@/lib/utils";
+import { postApi } from "@/lib/api";
 
 /* ── Skeleton loader ────────────────────────────────────────────── */
 function Skeleton({ className }: { className?: string }) {
@@ -91,8 +93,10 @@ function LegendItem({ shade, label }: { shade: string; label: string }) {
 
 /* ── Page ────────────────────────────────────────────────────────── */
 export default function QueuesPage() {
-  const { data: queues, isLoading } = useQueues();
-  const { data: stats } = useStats();
+  const { data: queues, isLoading, mutate } = useQueues();
+  const { data: stats, mutate: mutateStats } = useStats();
+  const [clearing, setClearing] = useState(false);
+  const [clearMsg, setClearMsg] = useState("");
 
   const totalJobs =
     queues?.reduce(
@@ -103,10 +107,51 @@ export default function QueuesPage() {
   const totalActive = queues?.reduce((sum, q) => sum + q.active, 0) ?? 0;
   const totalWaiting = queues?.reduce((sum, q) => sum + q.waiting, 0) ?? 0;
 
+  async function handleClearAll() {
+    if (!confirm("Clear ALL queue data, job logs, webhook events, and cron history? Settings will be preserved.")) return;
+    setClearing(true);
+    setClearMsg("");
+    try {
+      await postApi("/dashboard/data/reset");
+      setClearMsg("All data cleared successfully");
+      mutate();
+      mutateStats();
+    } catch (err) {
+      setClearMsg("Failed to clear data");
+    } finally {
+      setClearing(false);
+      setTimeout(() => setClearMsg(""), 3000);
+    }
+  }
+
   return (
     <div className="animate-enter">
-      {/* ── Page header (title only, no subtitle) ──────────────── */}
-      <PageHeader title="Queues" />
+      {/* ── Page header with Clear All button ──────────────────── */}
+      <div className="flex items-center justify-between mb-2">
+        <PageHeader title="Queues" />
+        <div className="flex items-center gap-3">
+          {clearMsg && (
+            <span className="text-xs" style={{ color: clearMsg.includes("success") ? "var(--success, #22C55E)" : "var(--error)" }}>
+              {clearMsg}
+            </span>
+          )}
+          <button
+            onClick={handleClearAll}
+            disabled={clearing}
+            className="px-4 py-2 text-xs font-medium uppercase tracking-wider"
+            style={{
+              background: clearing ? "var(--bg-elevated)" : "#C0392B",
+              color: "#fff",
+              border: "none",
+              borderRadius: "var(--radius-md, 6px)",
+              cursor: clearing ? "not-allowed" : "pointer",
+              opacity: clearing ? 0.6 : 1,
+            }}
+          >
+            {clearing ? "Clearing..." : "Clear All Data"}
+          </button>
+        </div>
+      </div>
 
       {/* ── Summary strip ──────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-10">

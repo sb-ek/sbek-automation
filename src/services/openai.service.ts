@@ -84,6 +84,7 @@ class AIService {
     return new OpenAI({
       apiKey: config.apiKey,
       baseURL: 'https://openrouter.ai/api/v1',
+      timeout: 60_000,
       defaultHeaders: {
         'HTTP-Referer': 'https://sbek.com',
         'X-Title': 'SBEK Automation',
@@ -174,6 +175,7 @@ class AIService {
         'X-Title': 'SBEK Automation',
       },
       body: JSON.stringify(body),
+      signal: AbortSignal.timeout(120_000),
     });
 
     if (!response.ok) {
