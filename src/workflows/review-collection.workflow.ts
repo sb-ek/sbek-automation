@@ -29,7 +29,7 @@ export async function sendReviewRequest(payload: ReviewRequestPayload): Promise<
       review_url: reviewUrl,
     },
     orderId,
-  });
+  }, { jobId: `notify-review-${orderId}` });
 
   logger.info({ orderId }, 'Review request sent');
 }

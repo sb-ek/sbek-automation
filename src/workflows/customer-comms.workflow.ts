@@ -43,7 +43,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
           product_name: productName,
         },
         orderId,
-      });
+      }, { jobId: `notify-production-${orderId}` });
       break;
 
     case 'Shipped':
@@ -62,7 +62,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
           carrier_name: event.carrierName || '',
         },
         orderId,
-      });
+      }, { jobId: `notify-shipped-${orderId}` });
       break;
 
     case 'Delivered':
@@ -79,7 +79,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
           product_name: productName,
         },
         orderId,
-      });
+      }, { jobId: `notify-delivered-${orderId}` });
 
       // Schedule review request 5 days later
       if (customerEmail || phone) {
@@ -94,6 +94,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
             deliveredDate: new Date().toISOString(),
           },
           {
+            jobId: `review-req-${orderId}`,
             delay: 5 * 24 * 60 * 60 * 1000, // 5 days in ms
           }
         );

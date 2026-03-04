@@ -107,7 +107,7 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
           delivery_date: promisedDelivery,
           tracking_url: env.BRAND_WEBSITE ? `${env.BRAND_WEBSITE}/my-account/orders/` : '#',
         },
-      });
+      }, { jobId: `notify-order-confirm-${orderId}` });
     }
   } else if (existingRow) {
     // 3b. Existing order -- update

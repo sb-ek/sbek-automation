@@ -178,7 +178,7 @@ async function dispatchTransition(
             order_id: orderId,
             product_name: order['Product'] || '',
           },
-        });
+        }, { jobId: `notify-qc-passed-${orderId}` });
       }
 
       await sheets.updateOrder(orderId, {
