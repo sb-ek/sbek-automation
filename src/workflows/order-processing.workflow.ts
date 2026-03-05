@@ -61,7 +61,11 @@ export async function processOrderSync(payload: OrderSyncPayload): Promise<void>
   const stones = parseJewelryMetaField(parsed.jewelryMeta, 'Stone');
   const engraving = parseJewelryMetaField(parsed.jewelryMeta, 'Engraving');
 
-  const customerId = String((rawPayload as Record<string, unknown>).customer_id ?? '');
+  // WooCommerce sends customer_id: 0 for guest checkouts — use order ID as fallback
+  const rawCustomerId = (rawPayload as Record<string, unknown>).customer_id;
+  const customerId = rawCustomerId && Number(rawCustomerId) > 0
+    ? String(rawCustomerId)
+    : `GUEST-${orderId}`;
 
   // 2. Check if order already exists
   const existingRow = await sheets.findOrderRow(String(orderId));

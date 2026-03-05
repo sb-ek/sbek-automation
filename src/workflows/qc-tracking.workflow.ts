@@ -65,7 +65,9 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
     return 'failed';
   }
 
-  const allPassed = items.every((row) => row['Pass/Fail'] === 'Pass');
+  const passedCount = items.filter((row) => row['Pass/Fail'] === 'Pass').length;
+  const totalCount = items.length;
+  const allPassed = passedCount === totalCount;
   const anyFailed = items.some((row) => row['Pass/Fail'] === 'Fail');
 
   if (allPassed) {
@@ -101,6 +103,8 @@ export async function evaluateQCResults(orderId: number): Promise<'passed' | 'fa
             order_id: String(orderId),
             product_name: order['Product'] || '',
             ship_date: formatDate(shipDate),
+            qc_passed: String(passedCount),
+            qc_total: String(totalCount),
           },
         }, { jobId: `notify-qc-passed-${orderId}` });
       }

@@ -3,7 +3,7 @@ import { redis } from '../../config/redis.js';
 import { sheets } from '../../services/googlesheets.service.js';
 import { createProductionTask } from '../../workflows/production-tracking.workflow.js';
 import { completeProduction } from '../../workflows/production-tracking.workflow.js';
-import { createQCChecklist } from '../../workflows/qc-tracking.workflow.js';
+import { createQCChecklist, evaluateQCResults } from '../../workflows/qc-tracking.workflow.js';
 import { handleStatusChange } from '../../workflows/customer-comms.workflow.js';
 import { notification } from '../../queues/registry.js';
 import { normalizePhone } from '../../utils/sanitize.js';
@@ -107,6 +107,37 @@ export async function runStatusPoller(): Promise<void> {
           'Status poller: transition error — will retry next cycle',
         );
         // Don't update snapshot so transition retries on next poll
+      }
+    }
+
+    // ── Auto-evaluate QC: if all items Pass → advance to Ready to Ship ──
+    const qcOrders = allOrders.filter((o) => o['Status'] === 'QC' && o['Order ID']);
+    for (const qcOrder of qcOrders) {
+      const qcOrderId = qcOrder['Order ID'];
+      try {
+        const qcItems = await sheets.getQCItems(qcOrderId);
+        if (!qcItems || qcItems.length === 0) continue;
+
+        // Only evaluate if every item has been decided (no "Pending" left)
+        const allDecided = qcItems.every(
+          (item) => item['Pass/Fail'] === 'Pass' || item['Pass/Fail'] === 'Fail',
+        );
+        if (!allDecided) continue;
+
+        const result = await evaluateQCResults(Number(qcOrderId));
+        if (result === 'passed') {
+          // evaluateQCResults already updates status to "Ready to Ship" + sends email
+          statusSnapshot.set(qcOrderId, 'Ready to Ship');
+          changesDetected++;
+          logger.info({ orderId: qcOrderId }, 'QC auto-evaluated: PASSED → Ready to Ship');
+        } else {
+          // evaluateQCResults sets status back to "In Production" for rework
+          statusSnapshot.set(qcOrderId, 'In Production');
+          changesDetected++;
+          logger.info({ orderId: qcOrderId }, 'QC auto-evaluated: FAILED → rework');
+        }
+      } catch (err) {
+        logger.error({ err, orderId: qcOrderId }, 'QC auto-evaluation error');
       }
     }
 
@@ -215,6 +246,17 @@ async function dispatchTransition(
       shipDate.setDate(shipDate.getDate() + 2);
       if (shipDate.getDay() === 0) shipDate.setDate(shipDate.getDate() + 1);
 
+      // Get QC counts for the email
+      let qcPassed = '0';
+      let qcTotal = '0';
+      try {
+        const qcItems = await sheets.getQCItems(orderId);
+        if (qcItems && qcItems.length > 0) {
+          qcTotal = String(qcItems.length);
+          qcPassed = String(qcItems.filter((item) => item['Pass/Fail'] === 'Pass').length);
+        }
+      } catch { /* non-critical */ }
+
       if (hasRecipient) {
         await notification.add(`poller-qc-passed-${orderId}`, {
           channel: 'both',
@@ -227,6 +269,8 @@ async function dispatchTransition(
             order_id: orderId,
             product_name: productName,
             ship_date: formatDate(shipDate),
+            qc_passed: qcPassed,
+            qc_total: qcTotal,
           },
         }, { jobId: `notify-qc-passed-${orderId}` });
       }

@@ -152,10 +152,12 @@ class EmailService {
     const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
     const from = emailFrom || `SBEK <${(await settings.get('SMTP_USER')) ?? env.SMTP_USER}>`;
+    // RFC 2047 encode subject to handle non-ASCII characters (emojis, accents, etc.)
+    const encodedSubject = `=?UTF-8?B?${Buffer.from(subject, 'utf-8').toString('base64')}?=`;
     const messageParts = [
       `From: ${from}`,
       `To: ${to}`,
-      `Subject: ${subject}`,
+      `Subject: ${encodedSubject}`,
       'MIME-Version: 1.0',
       'Content-Type: text/html; charset=utf-8',
       '',
