@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
-import { queues } from '../../queues/registry.js';
+import { queues, orderSync } from '../../queues/registry.js';
 import { db } from '../../config/database.js';
 import { pool } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
@@ -13,6 +13,7 @@ import { settings, CONFIGURABLE_KEYS, type ConfigurableKey } from '../../service
 import { seedDemoData } from '../../services/seed.service.js';
 import { sheets } from '../../services/googlesheets.service.js';
 import { gdrive } from '../../services/googledrive.service.js';
+import { woocommerce } from '../../services/woocommerce.service.js';
 
 export const dashboardRouter = Router();
 
@@ -595,6 +596,108 @@ dashboardRouter.post('/google/setup', async (_req: Request, res: Response) => {
   } catch (err) {
     const msg = err instanceof Error ? err.message : 'Setup failed';
     logger.error({ err }, 'Google setup error');
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// ── WooCommerce Webhook Registration ───────────────────────────────────
+
+dashboardRouter.post('/woocommerce/webhooks/register', async (req: Request, res: Response) => {
+  try {
+    // Derive the public app URL from the request or use an explicit override
+    const appUrl = (req.body.app_url as string)?.replace(/\/+$/, '')
+      || `${req.protocol}://${req.get('host')}`;
+
+    const webhookSecret = (await settings.get('WOO_WEBHOOK_SECRET')) ?? env.WOO_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      res.status(400).json({
+        success: false,
+        error: 'WOO_WEBHOOK_SECRET is not set. Add it in Settings → WooCommerce first.',
+      });
+      return;
+    }
+
+    // Check existing webhooks to avoid duplicates
+    const existing = await woocommerce.listWebhooks();
+    const orderUrl = `${appUrl}/api/webhooks/woocommerce/order`;
+    const productUrl = `${appUrl}/api/webhooks/woocommerce/product`;
+
+    const results: Array<{ topic: string; status: string; id?: number; skipped?: boolean }> = [];
+
+    for (const { topic, url } of [
+      { topic: 'order.created', url: orderUrl },
+      { topic: 'order.updated', url: orderUrl },
+      { topic: 'product.created', url: productUrl },
+      { topic: 'product.updated', url: productUrl },
+    ]) {
+      const alreadyExists = existing.some(
+        (wh) => wh.topic === topic && wh.delivery_url === url && wh.status === 'active',
+      );
+      if (alreadyExists) {
+        results.push({ topic, status: 'already registered', skipped: true });
+        continue;
+      }
+      const created = await woocommerce.registerWebhook(topic, url, webhookSecret);
+      results.push({ topic, status: created.status, id: created.id });
+    }
+
+    logger.info({ results, appUrl }, 'WooCommerce webhooks registered');
+    res.json({ success: true, appUrl, webhooks: results });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to register webhooks';
+    logger.error({ err }, 'Webhook registration error');
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+dashboardRouter.get('/woocommerce/webhooks', async (_req: Request, res: Response) => {
+  try {
+    const webhooks = await woocommerce.listWebhooks();
+    res.json({ success: true, webhooks });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to list webhooks';
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
+// ── Manual Order Sync ──────────────────────────────────────────────────
+
+dashboardRouter.post('/orders/sync', async (req: Request, res: Response) => {
+  try {
+    const { days = 7 } = req.body as { days?: number };
+    const since = new Date();
+    since.setDate(since.getDate() - days);
+
+    let page = 1;
+    let enqueued = 0;
+
+    while (page <= 20) {
+      const orders = await woocommerce.listOrders({
+        per_page: 50,
+        page,
+        after: since.toISOString(),
+      });
+
+      if (!orders || orders.length === 0) break;
+
+      for (const order of orders) {
+        await orderSync.add(`manual-sync-${order.id}`, {
+          orderId: order.id,
+          event: 'order.updated',
+          rawPayload: order as unknown as Record<string, unknown>,
+        }, { jobId: `manual-sync-${order.id}` });
+        enqueued++;
+      }
+
+      if (orders.length < 50) break;
+      page++;
+    }
+
+    logger.info({ enqueued, days }, 'Manual order sync triggered');
+    res.json({ success: true, enqueued, message: `Syncing ${enqueued} orders from the last ${days} days` });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Sync failed';
+    logger.error({ err }, 'Manual order sync error');
     res.status(500).json({ success: false, error: msg });
   }
 });
