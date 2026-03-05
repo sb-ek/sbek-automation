@@ -209,8 +209,9 @@ class GoogleSheetsService {
 
     let sheet = this.doc.sheetsByTitle[tabName];
 
+    const headers = TAB_HEADERS[tabName];
+
     if (!sheet) {
-      const headers = TAB_HEADERS[tabName];
       if (!headers) {
         logger.warn({ tabName }, 'No header definition for tab — skipping creation');
         return;
@@ -221,6 +222,13 @@ class GoogleSheetsService {
         title: tabName,
         headerValues: headers,
       });
+    } else if (headers) {
+      // Tab exists — make sure the header row is present
+      await sheet.loadHeaderRow().catch(() => null);
+      if (!sheet.headerValues || sheet.headerValues.length === 0) {
+        logger.info({ tabName }, 'Tab exists but has no headers — setting header row');
+        await sheet.setHeaderRow(headers);
+      }
     }
 
     this.sheetCache.set(tabName, sheet);
