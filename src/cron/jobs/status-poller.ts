@@ -150,55 +150,89 @@ async function dispatchTransition(
     processedAt: new Date(),
   }).catch((err) => { logger.warn({ err }, 'Failed to log status change to DB'); });
 
+  // Common data for notifications
+  const phone = order['Phone'] ? normalizePhone(order['Phone']) : undefined;
+  const email = order['Email'] || undefined;
+  const customerName = order['Customer Name'] || 'Customer';
+  const productName = order['Product'] || '';
+  const hasRecipient = !!(phone || email);
+
   // Match on TARGET status — works regardless of which status it came from.
-  // e.g. "New → QC" or "In Production → QC" both trigger QC actions.
   switch (newStatus) {
     // ── → In Production ─────────────────────────────────────────────
     case 'In Production': {
+      // Create production task row + auto-assign team
       await createProductionTask({
         orderId: numericId,
         status: 'in_production',
         assignee: order['Production Assignee'] || undefined,
         notes: order['Notes'] || undefined,
       });
+      // createProductionTask already sends customer email + updates sheet
       break;
     }
 
     // ── → QC ────────────────────────────────────────────────────────
     case 'QC': {
-      // Mark production as completed (if it exists)
+      // Mark production as completed
       await completeProduction(numericId).catch((err) => {
         logger.warn({ err, orderId }, 'completeProduction skipped (may not have production row)');
       });
+
+      // Create QC checklist in QC tab
       await createQCChecklist({
         orderId: numericId,
-        productName: order['Product'] || '',
+        productName,
         checklistItems: [],
+      });
+
+      // Notify customer that QC has started
+      if (hasRecipient) {
+        await notification.add(`poller-qc-started-${orderId}`, {
+          channel: 'email',
+          recipientPhone: phone,
+          recipientEmail: email,
+          recipientName: customerName,
+          templateName: 'qc_started',
+          templateData: {
+            customer_name: customerName,
+            order_id: orderId,
+            product_name: productName,
+          },
+        }, { jobId: `notify-qc-started-${orderId}` });
+      }
+
+      await sheets.updateOrder(orderId, {
+        'Last Updated': formatDate(new Date()),
       });
       break;
     }
 
-    // ── → Ready to Ship ─────────────────────────────────────────────
+    // ── → Ready to Ship (QC Passed) ─────────────────────────────────
     case 'Ready to Ship': {
-      const phone = order['Phone'] ? normalizePhone(order['Phone']) : undefined;
-      const email = order['Email'] || undefined;
+      // Calculate estimated ship date (2 business days from now)
+      const shipDate = new Date();
+      shipDate.setDate(shipDate.getDate() + 2);
+      if (shipDate.getDay() === 0) shipDate.setDate(shipDate.getDate() + 1);
 
-      if (phone || email) {
+      if (hasRecipient) {
         await notification.add(`poller-qc-passed-${orderId}`, {
           channel: 'both',
           recipientPhone: phone,
           recipientEmail: email,
-          recipientName: order['Customer Name'] || 'Customer',
+          recipientName: customerName,
           templateName: 'qc_passed',
           templateData: {
-            customer_name: order['Customer Name'] || 'Customer',
+            customer_name: customerName,
             order_id: orderId,
-            product_name: order['Product'] || '',
+            product_name: productName,
+            ship_date: formatDate(shipDate),
           },
         }, { jobId: `notify-qc-passed-${orderId}` });
       }
 
       await sheets.updateOrder(orderId, {
+        'Notes': 'QC Passed - Ready for dispatch',
         'Last Updated': formatDate(new Date()),
       });
       break;
@@ -210,10 +244,11 @@ async function dispatchTransition(
         orderId: numericId,
         oldStatus,
         newStatus,
-        customerName: order['Customer Name'] || 'Customer',
+        customerName,
         customerPhone: order['Phone'] || undefined,
-        customerEmail: order['Email'] || undefined,
-        productName: order['Product'] || '',
+        customerEmail: email,
+        productName,
+        trackingNumber: order['Tracking Number'] || undefined,
       });
 
       await sheets.updateOrder(orderId, {
@@ -228,15 +263,25 @@ async function dispatchTransition(
         orderId: numericId,
         oldStatus,
         newStatus,
-        customerName: order['Customer Name'] || 'Customer',
+        customerName,
         customerPhone: order['Phone'] || undefined,
-        customerEmail: order['Email'] || undefined,
-        productName: order['Product'] || '',
+        customerEmail: email,
+        productName,
       });
 
       await sheets.updateOrder(orderId, {
         'Last Updated': formatDate(new Date()),
       });
+      break;
+    }
+
+    // ── → Cancelled / Refunded ──────────────────────────────────────
+    case 'Cancelled':
+    case 'Refunded': {
+      await sheets.updateOrder(orderId, {
+        'Last Updated': formatDate(new Date()),
+      });
+      logger.info({ orderId, newStatus }, 'Order cancelled/refunded — no customer email');
       break;
     }
 

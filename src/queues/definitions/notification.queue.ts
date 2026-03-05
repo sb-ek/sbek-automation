@@ -97,7 +97,8 @@ export const notificationWorker = new Worker<NotificationPayload>(
 const emailSubjects: Record<string, string> = {
   'order_confirmation': 'Thank you for your SBEK order! 🎉',
   'production_started': 'Your SBEK piece is being crafted ✨',
-  'qc_passed': 'Your SBEK order passed quality check!',
+  'qc_started': 'Your SBEK piece is in quality check 🔍',
+  'qc_passed': 'Your SBEK order passed quality check! ✅',
   'order_shipped': 'Your SBEK order is on its way! 📦',
   'shipped': 'Your SBEK order is on its way! 📦',
   'delivered': 'Your SBEK order has been delivered 💎',
