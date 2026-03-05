@@ -67,6 +67,23 @@ export async function runStatusPoller(): Promise<void> {
       // New order appeared since last poll
       if (previousStatus === undefined) {
         statusSnapshot.set(orderId, currentStatus);
+        // If the order already has a non-"New" status, dispatch the transition
+        // so production tasks, notifications, etc. still fire
+        if (currentStatus && currentStatus !== 'New') {
+          try {
+            logger.info(
+              { orderId, status: currentStatus },
+              'Status poller: new order with non-New status — dispatching',
+            );
+            await dispatchTransition(orderId, 'New', currentStatus, order);
+            changesDetected++;
+          } catch (err) {
+            logger.error(
+              { err, orderId, status: currentStatus },
+              'Status poller: dispatch error for new order',
+            );
+          }
+        }
         continue;
       }
 
