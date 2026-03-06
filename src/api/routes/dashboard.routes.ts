@@ -455,17 +455,7 @@ dashboardRouter.get('/webhooks/recent', async (_req: Request, res: Response) => 
   }
 });
 
-// ── Competitor Snapshots ────────────────────────────────────────────────
-
-dashboardRouter.get('/competitors', async (_req: Request, res: Response) => {
-  try {
-    const snapshots = await db.select().from(competitorSnapshots).orderBy(desc(competitorSnapshots.crawledAt)).limit(20);
-    res.json({ snapshots });
-  } catch (err) {
-    logger.error({ err }, 'Dashboard competitors error');
-    res.status(500).json({ error: 'Failed to fetch competitor snapshots' });
-  }
-});
+// (Competitor routes are defined in the Competitor Monitoring section below)
 
 // ── Settings (no admin auth — internal dashboard use) ──────────────────
 

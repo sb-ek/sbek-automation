@@ -718,19 +718,58 @@ class GoogleSheetsService {
   async getCompetitors(): Promise<Array<{ name: string; url: string }>> {
     this.assertInitialized();
     try {
-      // Ensure the tab is loaded and headers are correct
-      await this.ensureTab(TAB_NAMES.COMPETITORS);
-      const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
-      if (!sheet) return [];
+      if (!this.doc) return [];
+
+      // Reload sheet metadata to pick up any external changes
+      await this.doc.loadInfo();
+
+      // Find sheet — exact match first, then case-insensitive fallback
+      let sheet = this.doc.sheetsByTitle[TAB_NAMES.COMPETITORS];
+      if (!sheet) {
+        const allTitles = this.doc.sheetsByIndex.map((s) => s.title);
+        logger.warn({ allTitles, expected: TAB_NAMES.COMPETITORS }, 'Competitors tab not found — checking case-insensitive');
+        const match = this.doc.sheetsByIndex.find(
+          (s) => s.title.toLowerCase().trim() === TAB_NAMES.COMPETITORS.toLowerCase(),
+        );
+        if (match) {
+          sheet = match;
+        } else {
+          return [];
+        }
+      }
+
+      // Load headers explicitly
+      await sheet.loadHeaderRow();
+      logger.info(
+        { headers: sheet.headerValues, tabTitle: sheet.title },
+        'Competitors tab headers loaded',
+      );
 
       const rows = await sheet.getRows();
-      return rows
-        .filter((r) => r.get('Active') !== 'No' && r.get('Active') !== 'FALSE')
+      logger.info({ rowCount: rows.length }, 'Competitors rows fetched');
+
+      // Log first row raw data for debugging
+      if (rows.length > 0) {
+        const firstRow = rows[0];
+        logger.info(
+          { name: firstRow.get('Name'), url: firstRow.get('URL'), active: firstRow.get('Active'), rawValues: firstRow.toObject() },
+          'First competitor row raw data',
+        );
+      }
+
+      const result = rows
+        .filter((r) => {
+          const active = r.get('Active');
+          return active !== 'No' && active !== 'FALSE' && active !== 'false';
+        })
         .map((r) => ({
-          name: r.get('Name') ?? '',
-          url: r.get('URL') ?? '',
+          name: (r.get('Name') ?? '').trim(),
+          url: (r.get('URL') ?? '').trim(),
         }))
         .filter((c) => c.name && c.url);
+
+      logger.info({ competitorsFound: result.length }, 'Active competitors resolved');
+      return result;
     } catch (error) {
       logger.error({ err: error }, 'Error fetching competitors');
       return [];
