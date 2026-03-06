@@ -369,6 +369,110 @@ class WooCommerceService {
     }
   }
 
+  // ── Auto-register Webhooks ──────────────────────────────────────────
+
+  /**
+   * Ensure that WooCommerce webhooks for order events are registered.
+   * Lists existing webhooks, checks for missing topics, and creates them.
+   * Returns { registered: string[], existing: string[] }.
+   */
+  async ensureWebhooks(
+    baseUrl?: string,
+  ): Promise<{ registered: string[]; existing: string[] }> {
+    const registered: string[] = [];
+    const existing: string[] = [];
+
+    // Resolve public base URL
+    const publicUrl =
+      baseUrl?.replace(/\/+$/, '') ||
+      env.PUBLIC_URL?.replace(/\/+$/, '') ||
+      (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : '');
+
+    if (!publicUrl) {
+      logger.warn('Cannot register webhooks: no PUBLIC_URL, RAILWAY_PUBLIC_DOMAIN, or baseUrl provided');
+      return { registered, existing };
+    }
+
+    const webhookSecret =
+      (await settings.get('WOO_WEBHOOK_SECRET' as any)) ??
+      env.WOO_WEBHOOK_SECRET ??
+      'sbek-webhook-secret';
+
+    // Topics to ensure, mapped to their delivery URLs
+    const requiredWebhooks: Array<{ topic: string; name: string; deliveryUrl: string }> = [
+      {
+        topic: 'order.created',
+        name: 'SBEK - Order Created',
+        deliveryUrl: `${publicUrl}/api/webhooks/woocommerce/order`,
+      },
+      {
+        topic: 'order.updated',
+        name: 'SBEK - Order Updated',
+        deliveryUrl: `${publicUrl}/api/webhooks/woocommerce/order`,
+      },
+      {
+        topic: 'order.deleted',
+        name: 'SBEK - Order Deleted',
+        deliveryUrl: `${publicUrl}/api/webhooks/woocommerce/order`,
+      },
+    ];
+
+    try {
+      const api = await this.getApi();
+
+      // List all existing webhooks (paginate to be safe)
+      let allWebhooks: Array<{ id: number; topic: string; delivery_url: string; status: string }> = [];
+      try {
+        const response = await api.get('webhooks', { per_page: 100 });
+        allWebhooks = response.data ?? [];
+      } catch (err) {
+        logger.error({ err }, 'Failed to list existing webhooks during ensureWebhooks');
+        throw err;
+      }
+
+      for (const wh of requiredWebhooks) {
+        const alreadyExists = allWebhooks.some(
+          (existing) =>
+            existing.topic === wh.topic &&
+            existing.delivery_url === wh.deliveryUrl &&
+            existing.status === 'active',
+        );
+
+        if (alreadyExists) {
+          existing.push(wh.topic);
+          logger.info({ topic: wh.topic }, 'Webhook already registered');
+          continue;
+        }
+
+        try {
+          const response = await api.post('webhooks', {
+            name: wh.name,
+            topic: wh.topic,
+            delivery_url: wh.deliveryUrl,
+            secret: webhookSecret,
+            status: 'active',
+          });
+          registered.push(wh.topic);
+          logger.info(
+            { topic: wh.topic, id: response.data?.id, deliveryUrl: wh.deliveryUrl },
+            'Webhook registered successfully',
+          );
+        } catch (err) {
+          logger.error({ err, topic: wh.topic }, 'Failed to register webhook');
+        }
+      }
+
+      logger.info(
+        { registered, existing, baseUrl: publicUrl },
+        'ensureWebhooks completed',
+      );
+    } catch (err) {
+      logger.error({ err }, 'ensureWebhooks failed — WooCommerce API may not be configured');
+    }
+
+    return { registered, existing };
+  }
+
   // ── WordPress REST API helper (wp/v2 — NOT wc/v3) ──────────────────
 
   /**

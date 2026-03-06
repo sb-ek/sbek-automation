@@ -73,6 +73,22 @@ export const systemConfig = pgTable('system_config', {
 });
 
 // ---------------------------------------------------------------------------
+// notificationLogs — tracks every notification sent to customers
+// ---------------------------------------------------------------------------
+export const notificationLogs = pgTable('notification_logs', {
+  id: serial('id').primaryKey(),
+  orderId: integer('order_id'),
+  recipientName: varchar('recipient_name', { length: 200 }),
+  recipientEmail: varchar('recipient_email', { length: 200 }),
+  recipientPhone: varchar('recipient_phone', { length: 50 }),
+  channel: varchar('channel', { length: 20 }).notNull(), // 'email', 'whatsapp', 'both'
+  templateName: varchar('template_name', { length: 100 }).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('sent'), // 'sent', 'failed', 'pending'
+  error: text('error'),
+  sentAt: timestamp('sent_at').defaultNow(),
+});
+
+// ---------------------------------------------------------------------------
 // Inferred TypeScript types (Select = read, Insert = write)
 // ---------------------------------------------------------------------------
 
@@ -95,3 +111,7 @@ export type NewCompetitorSnapshot = InferInsertModel<typeof competitorSnapshots>
 // systemConfig
 export type SystemConfig = InferSelectModel<typeof systemConfig>;
 export type NewSystemConfig = InferInsertModel<typeof systemConfig>;
+
+// notificationLogs
+export type NotificationLog = InferSelectModel<typeof notificationLogs>;
+export type NewNotificationLog = InferInsertModel<typeof notificationLogs>;

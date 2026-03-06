@@ -5,8 +5,8 @@ import { queues, orderSync, competitorCrawl } from '../../queues/registry.js';
 import { db } from '../../config/database.js';
 import { pool } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
-import { jobLogs, webhookEvents, cronRuns, competitorSnapshots } from '../../db/schema.js';
-import { desc, eq, count } from 'drizzle-orm';
+import { jobLogs, webhookEvents, cronRuns, competitorSnapshots, notificationLogs } from '../../db/schema.js';
+import { desc, eq, count, gte, sql, and, countDistinct } from 'drizzle-orm';
 import { logger } from '../../config/logger.js';
 import { env } from '../../config/env.js';
 import { settings, CONFIGURABLE_KEYS, type ConfigurableKey } from '../../services/settings.service.js';
@@ -67,6 +67,64 @@ dashboardRouter.get('/stats', async (_req: Request, res: Response) => {
       ? Math.round((totalCompleted / totalProcessed) * 10000) / 100
       : 100;
 
+    // ── Trend data: time-windowed queries ──
+    const now = new Date();
+    const h24ago = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const h48ago = new Date(now.getTime() - 48 * 60 * 60 * 1000);
+    const d7ago = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    const d14ago = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+
+    // Completed jobs in the last 24h vs previous 24h
+    const [completedLast24hRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'completed'), gte(jobLogs.completedAt, h24ago)));
+    const [completedPrev24hRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'completed'), gte(jobLogs.completedAt, h48ago), sql`${jobLogs.completedAt} < ${h24ago}`));
+
+    // Completed jobs in the last 7d vs previous 7d
+    const [completedLast7dRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'completed'), gte(jobLogs.completedAt, d7ago)));
+    const [completedPrev7dRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'completed'), gte(jobLogs.completedAt, d14ago), sql`${jobLogs.completedAt} < ${d7ago}`));
+
+    // Failed jobs in the last 24h vs previous 24h
+    const [failedLast24hRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'failed'), gte(jobLogs.completedAt, h24ago)));
+    const [failedPrev24hRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.status, 'failed'), gte(jobLogs.completedAt, h48ago), sql`${jobLogs.completedAt} < ${h24ago}`));
+
+    // Notification queue completed jobs (last 7 days)
+    const [notifRows] = await db
+      .select({ cnt: count() })
+      .from(jobLogs)
+      .where(and(eq(jobLogs.queueName, 'notification'), eq(jobLogs.status, 'completed'), gte(jobLogs.completedAt, d7ago)));
+
+    // Distinct competitors crawled this week
+    const [compRows] = await db
+      .select({ cnt: countDistinct(competitorSnapshots.competitorName) })
+      .from(competitorSnapshots)
+      .where(gte(competitorSnapshots.crawledAt, d7ago));
+
+    const completedLast24h = Number(completedLast24hRows?.cnt ?? 0);
+    const completedPrev24h = Number(completedPrev24hRows?.cnt ?? 0);
+    const completedLast7d = Number(completedLast7dRows?.cnt ?? 0);
+    const completedPrev7d = Number(completedPrev7dRows?.cnt ?? 0);
+    const failedLast24h = Number(failedLast24hRows?.cnt ?? 0);
+    const failedPrev24h = Number(failedPrev24hRows?.cnt ?? 0);
+    const notificationsSent = Number(notifRows?.cnt ?? 0);
+    const competitorsCrawled = Number(compRows?.cnt ?? 0);
+
     res.json({
       totalProcessed,
       totalCompleted,
@@ -79,6 +137,14 @@ dashboardRouter.get('/stats', async (_req: Request, res: Response) => {
         (q) => ((q.counts as Record<string, number>).active ?? 0) > 0
       ).length,
       totalQueues: allQueues.length,
+      completedLast24h,
+      completedPrev24h,
+      completedLast7d,
+      completedPrev7d,
+      failedLast24h,
+      failedPrev24h,
+      notificationsSent,
+      competitorsCrawled,
     });
   } catch (err) {
     logger.error({ err }, 'Dashboard stats error');
@@ -630,6 +696,28 @@ dashboardRouter.post('/woocommerce/webhooks/register', async (req: Request, res:
   }
 });
 
+/**
+ * POST /dashboard/woocommerce/register-webhooks
+ * Auto-register order webhooks (order.created, order.updated, order.deleted).
+ * Uses ensureWebhooks() which is idempotent — safe to call repeatedly.
+ */
+dashboardRouter.post('/woocommerce/register-webhooks', async (req: Request, res: Response) => {
+  try {
+    // Allow optional base URL override from request body
+    const baseUrl = (req.body.base_url as string) || undefined;
+    const result = await woocommerce.ensureWebhooks(baseUrl);
+    res.json({
+      success: true,
+      registered: result.registered,
+      existing: result.existing,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Failed to register webhooks';
+    logger.error({ err }, 'ensureWebhooks dashboard error');
+    res.status(500).json({ success: false, error: msg });
+  }
+});
+
 dashboardRouter.get('/woocommerce/webhooks', async (_req: Request, res: Response) => {
   try {
     const webhooks = await woocommerce.listWebhooks();
@@ -1006,5 +1094,28 @@ dashboardRouter.get('/competitors/results/download', async (req: Request, res: R
   } catch (err) {
     logger.error({ err }, 'Failed to generate competitor report');
     res.status(500).json({ error: 'Failed to generate report' });
+  }
+});
+
+// ── Notification History ──────────────────────────────────────────────────
+
+dashboardRouter.get('/notifications/history', async (req: Request, res: Response) => {
+  try {
+    const orderIdParam = req.query.orderId as string | undefined;
+
+    const query = orderIdParam
+      ? db.select().from(notificationLogs)
+          .where(eq(notificationLogs.orderId, Number(orderIdParam)))
+          .orderBy(desc(notificationLogs.sentAt))
+          .limit(100)
+      : db.select().from(notificationLogs)
+          .orderBy(desc(notificationLogs.sentAt))
+          .limit(100);
+
+    const notifications = await query;
+    res.json({ notifications });
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch notification history');
+    res.status(500).json({ error: 'Failed to fetch notification history' });
   }
 });

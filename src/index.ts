@@ -63,6 +63,19 @@ try {
       "crawled_at" timestamp DEFAULT now()
     );
 
+    CREATE TABLE IF NOT EXISTS "notification_logs" (
+      "id" serial PRIMARY KEY NOT NULL,
+      "order_id" integer,
+      "recipient_name" varchar(200),
+      "recipient_email" varchar(200),
+      "recipient_phone" varchar(50),
+      "channel" varchar(20) NOT NULL,
+      "template_name" varchar(100) NOT NULL,
+      "status" varchar(20) NOT NULL DEFAULT 'sent',
+      "error" text,
+      "sent_at" timestamp DEFAULT now()
+    );
+
     -- Performance indexes for common queries
     CREATE INDEX IF NOT EXISTS "idx_job_logs_queue" ON "job_logs" ("queue_name");
     CREATE INDEX IF NOT EXISTS "idx_job_logs_status" ON "job_logs" ("status");
@@ -71,6 +84,8 @@ try {
     CREATE INDEX IF NOT EXISTS "idx_competitor_snapshots_name" ON "competitor_snapshots" ("competitor_name");
     CREATE INDEX IF NOT EXISTS "idx_competitor_snapshots_crawled" ON "competitor_snapshots" ("crawled_at");
     CREATE INDEX IF NOT EXISTS "idx_cron_runs_job" ON "cron_runs" ("job_name");
+    CREATE INDEX IF NOT EXISTS "idx_notification_logs_order" ON "notification_logs" ("order_id");
+    CREATE INDEX IF NOT EXISTS "idx_notification_logs_sent" ON "notification_logs" ("sent_at");
   `);
   logger.info('Database tables ensured');
 } catch (err) {

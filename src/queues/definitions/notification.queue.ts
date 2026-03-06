@@ -6,6 +6,8 @@ import { whatsapp } from '../../services/whatsapp.service.js';
 import { wati } from '../../services/wati.service.js';
 import { email } from '../../services/email.service.js';
 import { logJobActive, logJobCompleted, logJobFailed } from '../job-logger.js';
+import { db } from '../../config/database.js';
+import { notificationLogs } from '../../db/schema.js';
 
 function redisOpts() {
   const url = new URL(env.REDIS_URL);
@@ -40,9 +42,36 @@ export const notificationWorker = new Worker<NotificationPayload>(
         });
         results.email = 'sent';
         logger.info({ recipientEmail, templateName }, 'Email sent');
+        try {
+          await db.insert(notificationLogs).values({
+            orderId: job.data.orderId ?? null,
+            recipientName: safeName,
+            recipientEmail,
+            recipientPhone: recipientPhone ?? null,
+            channel: 'email',
+            templateName,
+            status: 'sent',
+          });
+        } catch (logErr) {
+          logger.warn({ err: logErr }, 'Failed to log email notification');
+        }
       } catch (err) {
         logger.error({ err, recipientEmail, templateName }, 'Email failed');
         results.email = 'failed';
+        try {
+          await db.insert(notificationLogs).values({
+            orderId: job.data.orderId ?? null,
+            recipientName: safeName,
+            recipientEmail,
+            recipientPhone: recipientPhone ?? null,
+            channel: 'email',
+            templateName,
+            status: 'failed',
+            error: err instanceof Error ? err.message : String(err),
+          });
+        } catch (logErr) {
+          logger.warn({ err: logErr }, 'Failed to log email notification failure');
+        }
       }
     }
 
@@ -62,6 +91,19 @@ export const notificationWorker = new Worker<NotificationPayload>(
         );
         results.whatsapp = msgId;
         logger.info({ recipientPhone, templateName, msgId }, 'WhatsApp sent via Meta');
+        try {
+          await db.insert(notificationLogs).values({
+            orderId: job.data.orderId ?? null,
+            recipientName: safeName,
+            recipientEmail: recipientEmail ?? null,
+            recipientPhone,
+            channel: 'whatsapp',
+            templateName,
+            status: 'sent',
+          });
+        } catch (logErr) {
+          logger.warn({ err: logErr }, 'Failed to log WhatsApp notification');
+        }
       } catch (metaErr) {
         logger.warn({ err: metaErr, recipientPhone, templateName }, 'Meta WhatsApp failed — trying backup');
 
@@ -70,9 +112,36 @@ export const notificationWorker = new Worker<NotificationPayload>(
             const backup = await wati.sendTemplate(recipientPhone, templateName, templateData);
             results.whatsapp = `${backup.provider}:${backup.messageId}`;
             logger.info({ recipientPhone, templateName, provider: backup.provider }, 'WhatsApp sent via backup');
+            try {
+              await db.insert(notificationLogs).values({
+                orderId: job.data.orderId ?? null,
+                recipientName: safeName,
+                recipientEmail: recipientEmail ?? null,
+                recipientPhone,
+                channel: 'whatsapp',
+                templateName,
+                status: 'sent',
+              });
+            } catch (logErr) {
+              logger.warn({ err: logErr }, 'Failed to log WhatsApp backup notification');
+            }
           } catch (backupErr) {
             logger.error({ err: backupErr, recipientPhone, templateName }, 'All WhatsApp providers failed');
             results.whatsapp = 'failed';
+            try {
+              await db.insert(notificationLogs).values({
+                orderId: job.data.orderId ?? null,
+                recipientName: safeName,
+                recipientEmail: recipientEmail ?? null,
+                recipientPhone,
+                channel: 'whatsapp',
+                templateName,
+                status: 'failed',
+                error: backupErr instanceof Error ? backupErr.message : String(backupErr),
+              });
+            } catch (logErr) {
+              logger.warn({ err: logErr }, 'Failed to log WhatsApp notification failure');
+            }
           }
         } else {
           logger.warn({ recipientPhone, templateName }, 'WhatsApp not configured — skipping');

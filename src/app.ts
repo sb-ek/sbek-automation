@@ -1,9 +1,39 @@
 import express from 'express';
 import helmet from 'helmet';
 import cors from 'cors';
+import rateLimit from 'express-rate-limit';
 import { requestLogger } from './api/middleware/requestLogger.js';
 import { errorHandler } from './api/middleware/errorHandler.js';
 import { router } from './api/routes/index.js';
+
+// --- Rate limiters ---
+
+/** Global fallback: 100 req/min per IP */
+export const globalLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+
+/** Stricter limit for webhook endpoints: 30 req/min per IP */
+export const webhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many webhook requests, please try again later' },
+});
+
+/** Dashboard polls frequently — 200 req/min per IP */
+export const dashboardLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 200,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many dashboard requests, please try again later' },
+});
 
 /**
  * Create and configure the Express application.
@@ -37,6 +67,13 @@ export function createApp() {
 
   // Request logging (skips /health to reduce noise)
   app.use(requestLogger);
+
+  // Global rate limit (100 req/min per IP)
+  app.use(globalLimiter);
+
+  // Route-specific rate limits (applied before route handlers)
+  app.use('/webhooks', webhookLimiter);
+  app.use('/dashboard', dashboardLimiter);
 
   // All routes
   app.use(router);

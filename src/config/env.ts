@@ -10,6 +10,10 @@ const envSchema = z.object({
     .enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace'])
     .default('info'),
 
+  // ── Public URL ────────────────────────────────────────
+  PUBLIC_URL: z.string().url().optional(),
+  RAILWAY_PUBLIC_DOMAIN: z.string().min(1).optional(),
+
   // ── Database ───────────────────────────────────────────
   DATABASE_URL: z.string().url(),
 

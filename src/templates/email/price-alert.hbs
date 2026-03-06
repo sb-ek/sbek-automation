@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Competitor Price Alert</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F5F5F5; font-family: Arial, sans-serif;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F5F5;">
+    <tr>
+      <td align="center" style="padding: 24px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- Dark Header -->
+          <tr>
+            <td align="center" style="background-color: #1A1A2E; padding: 28px 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="font-family: Georgia, serif; font-size: 36px; font-weight: bold; color: #B8860B; letter-spacing: 8px;">SBEK</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: Arial, sans-serif; font-size: 11px; color: rgba(255,255,255,0.7); letter-spacing: 3px; padding-top: 6px; text-transform: uppercase;">Competitor Price Alert</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr><td style="background-color: #B8860B; height: 3px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px 32px 24px 32px;">
+
+              <!-- Title -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Georgia, serif; font-size: 24px; color: #1A1A2E; padding-bottom: 8px;">
+                    Price Changes Detected: {{competitor_name}}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 14px; color: #888; padding-bottom: 24px;">
+                    {{alert_date}} | {{change_count}} product(s) with significant price changes (&gt;10%)
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Alert Banner -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 18px 24px; background-color: #FFF3CD; border-left: 4px solid #FFC107; border-radius: 4px;">
+                    <span style="font-family: Arial, sans-serif; font-size: 14px; color: #856404; font-weight: bold;">Price Alert</span><br />
+                    <span style="font-family: Arial, sans-serif; font-size: 14px; color: #856404;">One or more products from <strong>{{competitor_name}}</strong> have changed in price by more than 10%. Review the details below.</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-bottom: 2px solid #F0E6D0; height: 1px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+              </table>
+
+              <!-- Price Changes Table -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Georgia, serif; font-size: 20px; color: #B8860B; padding: 28px 0 16px 0;">
+                    Price Change Details
+                  </td>
+                </tr>
+              </table>
+
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px; border: 1px solid #E0D5C3; border-radius: 6px; overflow: hidden;">
+                <!-- Table Header -->
+                <tr>
+                  <td style="padding: 12px 16px; background-color: #1A1A2E; font-family: Arial, sans-serif; font-size: 12px; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; font-weight: bold;">Product</td>
+                  <td style="padding: 12px 16px; background-color: #1A1A2E; font-family: Arial, sans-serif; font-size: 12px; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; text-align: right;">Old Price</td>
+                  <td style="padding: 12px 16px; background-color: #1A1A2E; font-family: Arial, sans-serif; font-size: 12px; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; text-align: right;">New Price</td>
+                  <td style="padding: 12px 16px; background-color: #1A1A2E; font-family: Arial, sans-serif; font-size: 12px; color: #FFFFFF; text-transform: uppercase; letter-spacing: 1px; font-weight: bold; text-align: right;">Change</td>
+                </tr>
+                <!-- Table Rows -->
+                {{#each price_changes}}
+                <tr>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F0E6D0; font-family: Arial, sans-serif; font-size: 14px; color: #333;">{{this.productName}}</td>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F0E6D0; font-family: Arial, sans-serif; font-size: 14px; color: #888; text-align: right;">{{this.oldPrice}}</td>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F0E6D0; font-family: Arial, sans-serif; font-size: 14px; color: #333; font-weight: bold; text-align: right;">{{this.newPrice}}</td>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F0E6D0; font-family: Arial, sans-serif; font-size: 14px; font-weight: bold; text-align: right; color: {{#if this.isPriceIncrease}}#C0392B{{else}}#27AE60{{/if}};">{{this.changePercent}}%</td>
+                </tr>
+                {{/each}}
+              </table>
+
+              <!-- Summary -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 16px; background-color: #F8F4EF; border-radius: 6px; font-family: Arial, sans-serif; font-size: 14px; color: #444; line-height: 1.6;">
+                    <strong style="color: #1A1A2E;">Summary:</strong> {{summary}}
+                  </td>
+                </tr>
+              </table>
+
+              <!-- URL -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 14px; color: #888; padding-top: 16px;">
+                    Source: {{competitor_url}}
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #1A1A1A; padding: 24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="font-family: Georgia, serif; font-size: 20px; color: #B8860B; letter-spacing: 6px;">SBEK</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: Arial, sans-serif; font-size: 12px; color: #777; padding-top: 8px;">Internal competitor price alert</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>

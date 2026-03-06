@@ -31,6 +31,14 @@ export interface StatsData {
   successRate: number;
   activeQueues: number;
   totalQueues: number;
+  completedLast24h: number;
+  completedPrev24h: number;
+  completedLast7d: number;
+  completedPrev7d: number;
+  failedLast24h: number;
+  failedPrev24h: number;
+  notificationsSent: number;
+  competitorsCrawled: number;
 }
 
 export function useStats() {

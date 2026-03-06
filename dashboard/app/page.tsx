@@ -196,35 +196,71 @@ export default function DashboardPage() {
               <StatSkeleton />
             </>
           ) : (
-            <>
-              <StatCard
-                label="Orders Processed"
-                value={formatNumber(stats.totalProcessed)}
-                trend="up"
-                trendLabel="+12% vs last week"
-              />
-              <StatCard
-                label="Failed Today"
-                value={formatNumber(stats.totalFailed)}
-                trend={stats.totalFailed > 0 ? "down" : "flat"}
-                trendLabel="last 24h"
-                subtitle={
-                  stats.totalFailed > 0 ? "requires attention" : undefined
-                }
-              />
-              <StatCard
-                label="Success Rate"
-                value={`${stats.successRate.toFixed(1)}%`}
-                trend="up"
-                trendLabel="+0.3% vs yesterday"
-              />
-              <StatCard
-                label="In Progress"
-                value={formatNumber(stats.totalActive)}
-                trend="flat"
-                trendLabel="right now"
-              />
-            </>
+            (() => {
+              // Compute real trend percentages
+              const weeklyPct = stats.completedPrev7d > 0
+                ? Math.round(((stats.completedLast7d - stats.completedPrev7d) / stats.completedPrev7d) * 100)
+                : stats.completedLast7d > 0 ? 100 : 0;
+              const weeklyTrend: "up" | "down" | "flat" = weeklyPct > 0 ? "up" : weeklyPct < 0 ? "down" : "flat";
+              const weeklyLabel = weeklyPct > 0
+                ? `+${weeklyPct}% vs last week`
+                : weeklyPct < 0
+                ? `${weeklyPct}% vs last week`
+                : "no change vs last week";
+
+              const failedDelta = stats.failedLast24h - stats.failedPrev24h;
+              const failedTrend: "up" | "down" | "flat" = stats.failedLast24h === 0 ? "flat" : failedDelta > 0 ? "down" : failedDelta < 0 ? "up" : "flat";
+              const failedLabel = failedDelta > 0
+                ? `+${failedDelta} vs prev 24h`
+                : failedDelta < 0
+                ? `${failedDelta} vs prev 24h`
+                : "same as prev 24h";
+
+              // Success rate delta: current period vs previous period
+              const currTotal = stats.completedLast24h + stats.failedLast24h;
+              const prevTotal = stats.completedPrev24h + stats.failedPrev24h;
+              const currRate = currTotal > 0 ? (stats.completedLast24h / currTotal) * 100 : 100;
+              const prevRate = prevTotal > 0 ? (stats.completedPrev24h / prevTotal) * 100 : 100;
+              const rateDelta = Math.round((currRate - prevRate) * 10) / 10;
+              const rateTrend: "up" | "down" | "flat" = rateDelta > 0 ? "up" : rateDelta < 0 ? "down" : "flat";
+              const rateLabel = rateDelta > 0
+                ? `+${rateDelta}% vs yesterday`
+                : rateDelta < 0
+                ? `${rateDelta}% vs yesterday`
+                : "same as yesterday";
+
+              return (
+                <>
+                  <StatCard
+                    label="Orders Processed"
+                    value={formatNumber(stats.totalProcessed)}
+                    trend={weeklyTrend}
+                    trendLabel={weeklyLabel}
+                  />
+                  <StatCard
+                    label="Failed (24h)"
+                    value={formatNumber(stats.failedLast24h)}
+                    trend={failedTrend}
+                    trendLabel={failedLabel}
+                    subtitle={
+                      stats.failedLast24h > 0 ? "requires attention" : undefined
+                    }
+                  />
+                  <StatCard
+                    label="Success Rate"
+                    value={`${stats.successRate.toFixed(1)}%`}
+                    trend={rateTrend}
+                    trendLabel={rateLabel}
+                  />
+                  <StatCard
+                    label="Notifications Sent"
+                    value={formatNumber(stats.notificationsSent)}
+                    trend="flat"
+                    trendLabel="last 7 days"
+                  />
+                </>
+              );
+            })()
           )}
         </div>
       </div>
