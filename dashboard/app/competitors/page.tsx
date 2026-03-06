@@ -68,11 +68,30 @@ export default function CompetitorsPage() {
     }
   }
 
-  function handleDownload(name?: string) {
+  async function handleDownload(name?: string) {
     const url = name
       ? `/api/dashboard/competitors/results/download?name=${encodeURIComponent(name)}`
       : `/api/dashboard/competitors/results/download`;
-    window.open(url, "_blank");
+    try {
+      const res = await fetch(url);
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: "Download failed" }));
+        setCrawlMsg(err.error || "Download failed");
+        setTimeout(() => setCrawlMsg(""), 4000);
+        return;
+      }
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = name
+        ? `SBEK-Competitor-Report-${name.replace(/\s+/g, "-")}.pdf`
+        : "SBEK-Competitor-Analysis-Report.pdf";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    } catch {
+      setCrawlMsg("Download failed — check if competitor has been crawled");
+      setTimeout(() => setCrawlMsg(""), 4000);
+    }
   }
 
   return (

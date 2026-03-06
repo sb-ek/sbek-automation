@@ -1076,11 +1076,19 @@ dashboardRouter.get('/competitors/results/download', async (req: Request, res: R
     const snapshots = await query;
 
     if (snapshots.length === 0) {
-      res.status(404).json({ error: 'No crawl results found — run a crawl first' });
+      res.status(404).json({ error: name ? `No crawl results for "${name}" — crawl this competitor first` : 'No crawl results found — run a crawl first' });
       return;
     }
 
-    const { generateCompetitorReport } = await import('../../utils/competitor-report.js');
+    let generateCompetitorReport: typeof import('../../utils/competitor-report.js').generateCompetitorReport;
+    try {
+      const mod = await import('../../utils/competitor-report.js');
+      generateCompetitorReport = mod.generateCompetitorReport;
+    } catch (importErr) {
+      logger.error({ importErr }, 'Failed to load competitor-report module — rebuild may be needed');
+      res.status(500).json({ error: 'PDF report module not available — the server may need a rebuild' });
+      return;
+    }
 
     const filename = name
       ? `SBEK-Competitor-Report-${name.replace(/\s+/g, '-')}.pdf`
@@ -1090,10 +1098,18 @@ dashboardRouter.get('/competitors/results/download', async (req: Request, res: R
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
     const doc = generateCompetitorReport(snapshots, name);
+    doc.on('error', (pdfErr: Error) => {
+      logger.error({ pdfErr }, 'PDF stream error');
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'PDF generation failed' });
+      }
+    });
     doc.pipe(res);
   } catch (err) {
     logger.error({ err }, 'Failed to generate competitor report');
-    res.status(500).json({ error: 'Failed to generate report' });
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to generate report' });
+    }
   }
 });
 
