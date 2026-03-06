@@ -136,6 +136,28 @@ export function useWebhooks() {
   return usePolling<WebhookEvent[]>('/dashboard/webhooks/recent', 10_000, unwrapFetcher('events'));
 }
 
+// ── Competitors ──
+export interface CompetitorItem {
+  name: string;
+  url: string;
+}
+
+export interface CompetitorResult {
+  id: number;
+  competitorName: string;
+  url: string;
+  crawledAt: string;
+  data: Record<string, unknown>;
+}
+
+export function useCompetitors() {
+  return usePolling<CompetitorItem[]>('/dashboard/competitors', 0, unwrapFetcher('competitors'));
+}
+
+export function useCompetitorResults() {
+  return usePolling<CompetitorResult[]>('/dashboard/competitors/results', 0, unwrapFetcher('results'));
+}
+
 // ── Settings ──
 export interface SettingInfo {
   key: string;
