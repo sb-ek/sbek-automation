@@ -50,11 +50,16 @@ RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
 COPY src/templates ./dist/templates
-COPY seo/ ./seo/
-COPY creatives/ ./creatives/
 
-# Include seed script and source for dashboard seed/reset button
-COPY scripts/ ./scripts/
+# Copy optional asset directories — use shell so build doesn't fail if missing
+RUN mkdir -p /app/seo /app/creatives
+COPY . /tmp/ctx/
+RUN cp -r /tmp/ctx/seo/* /app/seo/ 2>/dev/null || true; \
+    cp -r /tmp/ctx/creatives/* /app/creatives/ 2>/dev/null || true; \
+    cp -r /tmp/ctx/scripts /app/scripts 2>/dev/null || true; \
+    rm -rf /tmp/ctx
+
+# Include source for dashboard seed/reset button
 COPY src/ ./src/
 COPY tsconfig.json ./
 RUN npm install tsx --save-optional --no-save 2>/dev/null || true
