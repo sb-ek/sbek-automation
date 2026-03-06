@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import nodemailer from 'nodemailer';
 import { google } from 'googleapis';
-import { queues, orderSync } from '../../queues/registry.js';
+import { queues, orderSync, competitorCrawl } from '../../queues/registry.js';
 import { db } from '../../config/database.js';
 import { pool } from '../../config/database.js';
 import { redis } from '../../config/redis.js';
@@ -399,18 +399,8 @@ dashboardRouter.get('/system/health', async (_req: Request, res: Response) => {
     health.postgres = { status: 'error', info: 'PostgreSQL unreachable' };
   }
 
-  // Crawler
-  try {
-    const start = Date.now();
-    const crawlerUrl = env.CRAWLER_BASE_URL || 'http://crawler:3001';
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const resp = await fetch(`${crawlerUrl}/health`, { signal: controller.signal });
-    clearTimeout(timeout);
-    health.crawler = { status: resp.ok ? 'ok' : 'error', latency: Date.now() - start };
-  } catch {
-    health.crawler = { status: 'error', info: 'Crawler unreachable' };
-  }
+  // Crawler (built-in — always healthy)
+  health.crawler = { status: 'ok', latency: 0 };
 
   const allOk = Object.values(health).every((s) => s.status === 'ok');
 
@@ -891,16 +881,8 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
 
 
       case 'crawler': {
-        const crawlerUrl = await resolve('CRAWLER_BASE_URL') || 'http://localhost:3001';
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 5000);
-        const resp = await fetch(`${crawlerUrl}/health`, { signal: controller.signal });
-        clearTimeout(timeout);
-        if (!resp.ok) {
-          res.json({ valid: false, message: `Crawler returned ${resp.status}` });
-          return;
-        }
-        res.json({ valid: true, message: 'Crawler service is reachable' });
+        // Built-in crawler — always available
+        res.json({ valid: true, message: 'Built-in crawler is ready (no external service needed)' });
         return;
       }
 
@@ -912,5 +894,126 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
     const msg = err instanceof Error ? err.message : 'Validation failed';
     logger.error({ err, section }, 'Settings validation error');
     res.json({ valid: false, message: msg });
+  }
+});
+
+// ── Competitor Monitoring ──────────────────────────────────────────────
+
+/** List all competitors from the Sheets tab */
+dashboardRouter.get('/competitors', async (_req: Request, res: Response) => {
+  try {
+    const competitors = await sheets.getCompetitors();
+    res.json({ competitors });
+  } catch (err) {
+    logger.error({ err }, 'Failed to list competitors');
+    res.status(500).json({ error: 'Failed to list competitors' });
+  }
+});
+
+/** Add a new competitor */
+dashboardRouter.post('/competitors', async (req: Request, res: Response) => {
+  try {
+    const { name, url } = req.body;
+    if (!name || !url) {
+      res.status(400).json({ error: 'name and url are required' });
+      return;
+    }
+    await sheets.appendCompetitor({ Name: name, URL: url, Active: 'Yes' });
+    res.json({ success: true, message: `Competitor "${name}" added` });
+  } catch (err) {
+    logger.error({ err }, 'Failed to add competitor');
+    res.status(500).json({ error: 'Failed to add competitor' });
+  }
+});
+
+/** Trigger crawl for a single competitor or all competitors */
+dashboardRouter.post('/competitors/crawl', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.body; // optional — if not provided, crawl all active
+
+    const competitors = await sheets.getCompetitors();
+    const toCrawl = name
+      ? competitors.filter((c) => c.name === name)
+      : competitors;
+
+    if (toCrawl.length === 0) {
+      res.status(404).json({ error: name ? `Competitor "${name}" not found or inactive` : 'No active competitors configured' });
+      return;
+    }
+
+    let enqueued = 0;
+    for (const comp of toCrawl) {
+      await competitorCrawl.add(`manual-crawl-${comp.name}`, {
+        competitorName: comp.name,
+        url: comp.url,
+      }, { jobId: `manual-crawl-${comp.name}-${Date.now()}` });
+      enqueued++;
+    }
+
+    res.json({ success: true, enqueued, competitors: toCrawl.map((c) => c.name) });
+  } catch (err) {
+    logger.error({ err }, 'Failed to trigger competitor crawl');
+    res.status(500).json({ error: 'Failed to trigger crawl' });
+  }
+});
+
+/** Get crawl results/history for competitors from DB snapshots */
+dashboardRouter.get('/competitors/results', async (req: Request, res: Response) => {
+  try {
+    const name = req.query.name as string | undefined;
+    const limit = Math.min(parseInt(req.query.limit as string) || 20, 100);
+
+    const query = name
+      ? db.select().from(competitorSnapshots)
+          .where(eq(competitorSnapshots.competitorName, name))
+          .orderBy(desc(competitorSnapshots.crawledAt))
+          .limit(limit)
+      : db.select().from(competitorSnapshots)
+          .orderBy(desc(competitorSnapshots.crawledAt))
+          .limit(limit);
+
+    const snapshots = await query;
+    res.json({ results: snapshots });
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch competitor results');
+    res.status(500).json({ error: 'Failed to fetch results' });
+  }
+});
+
+/** Download crawl results as JSON */
+dashboardRouter.get('/competitors/results/download', async (req: Request, res: Response) => {
+  try {
+    const name = req.query.name as string | undefined;
+
+    const query = name
+      ? db.select().from(competitorSnapshots)
+          .where(eq(competitorSnapshots.competitorName, name))
+          .orderBy(desc(competitorSnapshots.crawledAt))
+          .limit(50)
+      : db.select().from(competitorSnapshots)
+          .orderBy(desc(competitorSnapshots.crawledAt))
+          .limit(50);
+
+    const snapshots = await query;
+
+    const filename = name
+      ? `competitor-${name.replace(/\s+/g, '-').toLowerCase()}-results.json`
+      : 'all-competitor-results.json';
+
+    res.setHeader('Content-Type', 'application/json');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.json({
+      exportedAt: new Date().toISOString(),
+      totalResults: snapshots.length,
+      results: snapshots.map((s) => ({
+        competitor: s.competitorName,
+        url: s.url,
+        crawledAt: s.crawledAt,
+        data: s.data,
+      })),
+    });
+  } catch (err) {
+    logger.error({ err }, 'Failed to download competitor results');
+    res.status(500).json({ error: 'Failed to download results' });
   }
 });

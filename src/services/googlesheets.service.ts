@@ -101,6 +101,12 @@ const TAB_HEADERS: Record<string, string[]> = {
     'Name',
     'URL',
     'Active',
+    'Last Crawled',
+    'Products Found',
+    'Price Range',
+    'SEO Score',
+    'AI Analysis',
+    'Changes Detected',
   ],
   [TAB_NAMES.SYSTEM_LOGS]: [
     'Timestamp',
@@ -748,6 +754,30 @@ class GoogleSheetsService {
       logger.info({ name: data['Name'] }, 'Competitor appended');
     } catch (error) {
       logger.error({ err: error, data }, 'Error appending competitor');
+    }
+  }
+
+  /** Update a competitor row with crawl results. */
+  async updateCompetitor(name: string, data: Record<string, string>): Promise<void> {
+    this.assertInitialized();
+    try {
+      const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
+      if (!sheet) return;
+
+      const rows = await sheet.getRows();
+      const row = rows.find((r) => r.get('Name') === name);
+      if (!row) {
+        logger.warn({ name }, 'Competitor not found for update');
+        return;
+      }
+
+      for (const [key, value] of Object.entries(data)) {
+        row.set(key, sanitizeForSheets(value));
+      }
+      await row.save();
+      logger.info({ name }, 'Competitor row updated with crawl results');
+    } catch (error) {
+      logger.error({ err: error, name }, 'Error updating competitor');
     }
   }
 

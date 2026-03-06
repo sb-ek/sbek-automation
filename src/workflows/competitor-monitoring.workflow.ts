@@ -7,20 +7,22 @@ import { crawler } from '../services/crawler.service.js';
 import { openai } from '../services/openai.service.js';
 import { sheets } from '../services/googlesheets.service.js';
 import { notification } from '../queues/registry.js';
+import { settings } from '../services/settings.service.js';
+import { formatDate } from '../utils/date.js';
 import type { CompetitorCrawlPayload } from '../queues/types.js';
 
 /**
  * Competitor Monitoring Workflow
  *
- * Triggered by: competitor-crawl queue worker
- *
  * Flow:
  * 1. Fetch previous snapshot from DB for delta comparison
- * 2. Crawl the competitor website via the crawler microservice
- * 3. Store new snapshot in DB for future comparison
- * 4. Analyse with OpenAI (including messaging/brand voice + technical SEO)
- * 5. Log results to Sheets
- * 6. If significant changes detected, send WhatsApp alert
+ * 2. Crawl the competitor website (built-in scraper)
+ * 3. Store new snapshot in DB
+ * 4. Analyse with AI (pricing, SEO, messaging, trends)
+ * 5. Update Competitors tab in Sheets with summary
+ * 6. Log full analysis to System Logs tab
+ * 7. Send email report to admin (ADMIN_EMAIL setting)
+ * 8. If significant changes detected, send WhatsApp alert
  */
 export async function processCompetitorCrawl(
   payload: CompetitorCrawlPayload,
@@ -50,15 +52,31 @@ export async function processCompetitorCrawl(
     logger.warn({ err, competitorName }, 'Failed to fetch previous snapshot — proceeding without delta');
   }
 
-  // 2. Crawl the competitor site (pass previous data for delta analysis)
+  // 2. Crawl the competitor site
   const crawlData = await crawler.analyzeSite(url, previousCrawlData);
 
-  logger.info(
-    { competitorName, productsFound: crawlData.products?.length ?? 0 },
-    'Competitor site crawled',
-  );
+  const productsFound = crawlData.products?.length ?? 0;
+  logger.info({ competitorName, productsFound }, 'Competitor site crawled');
 
-  // 3. Store new snapshot in DB for future comparisons
+  // Compute summary stats
+  const prices = crawlData.products
+    .map((p) => p.price)
+    .filter((p) => p > 0);
+  const priceRange = prices.length > 0
+    ? `${Math.min(...prices).toLocaleString('en-IN')} - ${Math.max(...prices).toLocaleString('en-IN')} INR`
+    : 'N/A';
+
+  // SEO score: simple heuristic (0-10)
+  let seoScore = 0;
+  if (crawlData.meta.description) seoScore += 2;
+  if (crawlData.techSeo.hasSchema) seoScore += 2;
+  if (crawlData.techSeo.hasOpenGraph) seoScore += 1;
+  if (crawlData.techSeo.hasSitemap) seoScore += 2;
+  if (crawlData.techSeo.h1Tags.length > 0) seoScore += 1;
+  if (crawlData.meta.canonical) seoScore += 1;
+  if (crawlData.techSeo.robotsTxt) seoScore += 1;
+
+  // 3. Store new snapshot in DB
   try {
     await db.insert(competitorSnapshots).values({
       competitorName,
@@ -70,7 +88,7 @@ export async function processCompetitorCrawl(
     logger.warn({ err, competitorName }, 'Failed to store competitor snapshot');
   }
 
-  // 4. Analyse with OpenAI — enhanced with messaging analysis + technical SEO
+  // 4. Analyse with AI
   const analysis = await openai.analyzeCompetitorEnhanced(
     competitorName,
     crawlData as unknown as Record<string, unknown>,
@@ -79,7 +97,22 @@ export async function processCompetitorCrawl(
 
   logger.info({ competitorName }, 'Enhanced competitor analysis completed');
 
-  // 5. Log results to Sheets
+  // 5. Update Competitors tab with summary
+  const hasSignificantChanges = detectSignificantChanges(analysis);
+  try {
+    await sheets.updateCompetitor(competitorName, {
+      'Last Crawled': formatDate(new Date()),
+      'Products Found': String(productsFound),
+      'Price Range': priceRange,
+      'SEO Score': `${seoScore}/10`,
+      'AI Analysis': analysis.slice(0, 500),
+      'Changes Detected': hasSignificantChanges ? 'Yes' : 'No',
+    });
+  } catch (err) {
+    logger.warn({ err, competitorName }, 'Failed to update Competitors tab');
+  }
+
+  // 6. Log full analysis to System Logs
   await sheets.logEvent(
     'info',
     'competitor-monitoring',
@@ -87,35 +120,66 @@ export async function processCompetitorCrawl(
     analysis,
   );
 
-  // 6. Check for significant changes and send WhatsApp alert if needed
-  const hasSignificantChanges = detectSignificantChanges(analysis);
-
-  if (hasSignificantChanges) {
-    logger.info({ competitorName }, 'Significant competitor changes detected — sending alert');
-
-    const adminPhone = env.BRAND_SUPPORT_PHONE;
-    if (!adminPhone) {
-      logger.warn({ competitorName }, 'No BRAND_SUPPORT_PHONE configured — skipping competitor WhatsApp alert');
-      return;
+  // 7. Send email report to admin
+  const adminEmail = await settings.get('ADMIN_EMAIL');
+  if (adminEmail) {
+    try {
+      await notification.add(`competitor-report-${competitorName}-${Date.now()}`, {
+        channel: 'email',
+        recipientEmail: adminEmail,
+        recipientName: 'SBEK Admin',
+        templateName: 'competitor_alert',
+        templateData: {
+          competitor_name: competitorName,
+          competitor_url: url,
+          crawl_date: formatDate(new Date()),
+          products_found: String(productsFound),
+          price_range: priceRange,
+          seo_score: `${seoScore}/10`,
+          pages_scraped: String(crawlData.pageCount),
+          analysis: analysis,
+          changes_detected: hasSignificantChanges ? 'Significant competitive changes detected — review recommended.' : '',
+        },
+      }, { jobId: `competitor-report-${competitorName}-${Date.now()}` });
+      logger.info({ competitorName, adminEmail }, 'Competitor report email sent to admin');
+    } catch (err) {
+      logger.error({ err, competitorName }, 'Failed to send competitor report email');
     }
-
-    await notification.add(`competitor-alert-${competitorName}`, {
-      channel: 'whatsapp',
-      recipientPhone: adminPhone,
-      recipientName: 'SBEK Admin',
-      templateName: 'qc_failed_alert',
-      templateData: {
-        order_id: competitorName,
-        failed_items: `Significant changes detected on ${competitorName}. Check System Logs for full analysis.`,
-      },
-    }, { jobId: `competitor-alert-${competitorName}` });
+  } else {
+    logger.warn('No ADMIN_EMAIL configured — skipping competitor report email. Set it in Dashboard > Settings.');
   }
 
-  logger.info({ competitorName, url }, 'Competitor monitoring workflow completed');
+  // 8. WhatsApp alert if significant changes
+  if (hasSignificantChanges) {
+    logger.info({ competitorName }, 'Significant competitor changes detected — sending WhatsApp alert');
+
+    const adminPhone = env.BRAND_SUPPORT_PHONE;
+    if (adminPhone) {
+      await notification.add(`competitor-whatsapp-${competitorName}`, {
+        channel: 'whatsapp',
+        recipientPhone: adminPhone,
+        recipientName: 'SBEK Admin',
+        templateName: 'competitor_alert',
+        templateData: {
+          competitor_name: competitorName,
+          competitor_url: url,
+          crawl_date: formatDate(new Date()),
+          products_found: String(productsFound),
+          price_range: priceRange,
+          seo_score: `${seoScore}/10`,
+          pages_scraped: String(crawlData.pageCount),
+          analysis: analysis.slice(0, 500),
+          changes_detected: 'Significant competitive changes detected.',
+        },
+      }, { jobId: `competitor-whatsapp-${competitorName}` });
+    }
+  }
+
+  logger.info({ competitorName, url, productsFound, seoScore }, 'Competitor monitoring workflow completed');
 }
 
 /**
- * Heuristic to detect whether the OpenAI analysis mentions significant
+ * Heuristic to detect whether the AI analysis mentions significant
  * competitive changes worth alerting the team about.
  */
 function detectSignificantChanges(analysis: string): boolean {

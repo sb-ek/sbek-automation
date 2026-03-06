@@ -63,6 +63,9 @@ export const CONFIGURABLE_KEYS = [
   'BRAND_SUPPORT_PHONE',
   'BRAND_SUPPORT_EMAIL',
   'REVIEW_URL',
+
+  // Admin notifications
+  'ADMIN_EMAIL',
 ] as const;
 
 export type ConfigurableKey = (typeof CONFIGURABLE_KEYS)[number];

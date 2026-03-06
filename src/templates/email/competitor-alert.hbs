@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Competitor Intelligence Report</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F5F5F5; font-family: Arial, sans-serif;">
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F5F5F5;">
+    <tr>
+      <td align="center" style="padding: 24px 16px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border-radius: 8px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.08);">
+
+          <!-- Dark Header -->
+          <tr>
+            <td align="center" style="background-color: #1A1A2E; padding: 28px 24px;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="font-family: Georgia, serif; font-size: 36px; font-weight: bold; color: #B8860B; letter-spacing: 8px;">SBEK</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: Arial, sans-serif; font-size: 11px; color: rgba(255,255,255,0.7); letter-spacing: 3px; padding-top: 6px; text-transform: uppercase;">Competitor Intelligence</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr><td style="background-color: #B8860B; height: 3px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding: 40px 32px 24px 32px;">
+
+              <!-- Title -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Georgia, serif; font-size: 24px; color: #1A1A2E; padding-bottom: 8px;">
+                    Competitor Report: {{competitor_name}}
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 14px; color: #888; padding-bottom: 24px;">
+                    Crawled on {{crawl_date}} | {{products_found}} products found | {{pages_scraped}} pages scraped
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Stats Row -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td width="33%" style="padding: 16px; background-color: #F8F4EF; border-radius: 6px 0 0 6px; text-align: center;">
+                    <span style="font-family: Arial, sans-serif; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Products</span><br />
+                    <span style="font-family: Georgia, serif; font-size: 24px; color: #B8860B; font-weight: bold;">{{products_found}}</span>
+                  </td>
+                  <td width="34%" style="padding: 16px; background-color: #F8F4EF; text-align: center;">
+                    <span style="font-family: Arial, sans-serif; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">Price Range</span><br />
+                    <span style="font-family: Georgia, serif; font-size: 18px; color: #B8860B; font-weight: bold;">{{price_range}}</span>
+                  </td>
+                  <td width="33%" style="padding: 16px; background-color: #F8F4EF; border-radius: 0 6px 6px 0; text-align: center;">
+                    <span style="font-family: Arial, sans-serif; font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 1px;">SEO Score</span><br />
+                    <span style="font-family: Georgia, serif; font-size: 24px; color: #B8860B; font-weight: bold;">{{seo_score}}</span>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Divider -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr><td style="border-bottom: 2px solid #F0E6D0; height: 1px; font-size: 0; line-height: 0;">&nbsp;</td></tr>
+              </table>
+
+              <!-- AI Analysis -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Georgia, serif; font-size: 20px; color: #B8860B; padding: 28px 0 16px 0;">
+                    AI Analysis
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 14px; color: #444; line-height: 1.8; padding-bottom: 24px; white-space: pre-line;">{{analysis}}</td>
+                </tr>
+              </table>
+
+              {{#if changes_detected}}
+              <!-- Changes Alert -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 24px;">
+                <tr>
+                  <td style="padding: 18px 24px; background-color: #FFF3CD; border-left: 4px solid #FFC107; border-radius: 4px;">
+                    <span style="font-family: Arial, sans-serif; font-size: 14px; color: #856404; font-weight: bold;">Significant Changes Detected</span><br />
+                    <span style="font-family: Arial, sans-serif; font-size: 14px; color: #856404;">{{changes_detected}}</span>
+                  </td>
+                </tr>
+              </table>
+              {{/if}}
+
+              <!-- URL -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="font-family: Arial, sans-serif; font-size: 14px; color: #888; padding-top: 16px;">
+                    Source: {{competitor_url}}
+                  </td>
+                </tr>
+              </table>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color: #1A1A1A; padding: 24px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="center" style="font-family: Georgia, serif; font-size: 20px; color: #B8860B; letter-spacing: 6px;">SBEK</td>
+                </tr>
+                <tr>
+                  <td align="center" style="font-family: Arial, sans-serif; font-size: 12px; color: #777; padding-top: 8px;">Internal competitor intelligence report</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+
+</body>
+</html>
