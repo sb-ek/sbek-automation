@@ -132,6 +132,7 @@ class WatiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
       },
     );
 
@@ -160,6 +161,7 @@ class WatiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ messageText: text }),
+        signal: AbortSignal.timeout(15_000),
       },
     );
 
@@ -204,6 +206,7 @@ class WatiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
       },
     );
 
@@ -237,6 +240,7 @@ class WatiService {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(15_000),
       },
     );
 

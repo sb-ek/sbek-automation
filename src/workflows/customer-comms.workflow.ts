@@ -1,6 +1,7 @@
 import { logger } from '../config/logger.js';
 import { notification, reviewRequest } from '../queues/registry.js';
 import { normalizePhone } from '../utils/sanitize.js';
+import { formatDate } from '../utils/date.js';
 
 /**
  * Customer Communications Workflow
@@ -60,6 +61,7 @@ export async function handleStatusChange(event: StatusChangeEvent): Promise<void
           tracking_number: event.trackingNumber || '',
           tracking_url: event.trackingUrl || '',
           carrier_name: event.carrierName || '',
+          delivery_date: formatDate(new Date(Date.now() + 5 * 24 * 60 * 60 * 1000)), // estimated 5 days
         },
         orderId,
       }, { jobId: `notify-shipped-${orderId}` });

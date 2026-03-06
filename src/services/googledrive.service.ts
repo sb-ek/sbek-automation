@@ -154,7 +154,7 @@ class GoogleDriveService {
         body: stream,
       },
       fields: 'id, webViewLink, webContentLink',
-    });
+    }, { timeout: 30_000 });
 
     const fileId = response.data.id!;
     const webViewLink = response.data.webViewLink || '';
