@@ -227,7 +227,7 @@ export default function CompetitorsPage() {
                   background: "var(--bg-elevated)",
                 }}
               >
-                {["Name", "URL", "Last Crawled", "Products", "Actions"].map(
+                {["Name", "URL", "Last Crawled", "Products", "Status", "Actions"].map(
                   (h) => (
                     <th
                       key={h}
@@ -247,6 +247,7 @@ export default function CompetitorsPage() {
                 );
                 const crawlData = latest?.data as Record<string, unknown> | undefined;
                 const productsFound = (crawlData?.products as unknown[])?.length ?? "-";
+                const crawlDifficulty = (crawlData?.crawlDifficulty as string) || null;
 
                 return (
                   <tr
@@ -286,6 +287,49 @@ export default function CompetitorsPage() {
                       style={{ color: "var(--text-subtle)" }}
                     >
                       {productsFound}
+                    </td>
+                    <td className="px-5 py-4">
+                      {crawlDifficulty === "blocked" ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full"
+                          style={{
+                            background: "rgba(204, 51, 51, 0.12)",
+                            color: "#CC3333",
+                            border: "1px solid rgba(204, 51, 51, 0.25)",
+                          }}
+                        >
+                          Blocked
+                        </span>
+                      ) : crawlDifficulty === "hard" ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full"
+                          style={{
+                            background: "rgba(217, 119, 6, 0.12)",
+                            color: "#D97706",
+                            border: "1px solid rgba(217, 119, 6, 0.25)",
+                          }}
+                        >
+                          Hard Crawl
+                        </span>
+                      ) : crawlDifficulty === "easy" ? (
+                        <span
+                          className="inline-flex items-center px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider rounded-full"
+                          style={{
+                            background: "rgba(34, 197, 94, 0.12)",
+                            color: "#22C55E",
+                            border: "1px solid rgba(34, 197, 94, 0.25)",
+                          }}
+                        >
+                          Easy
+                        </span>
+                      ) : (
+                        <span
+                          className="text-[10px]"
+                          style={{ color: "var(--text-subtle)" }}
+                        >
+                          —
+                        </span>
+                      )}
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center gap-2">
@@ -340,6 +384,7 @@ export default function CompetitorsPage() {
               const products = (data?.products as unknown[]) ?? [];
               const meta = data?.meta as Record<string, unknown> | undefined;
               const techSeo = data?.techSeo as Record<string, unknown> | undefined;
+              const difficulty = data?.crawlDifficulty as string | undefined;
 
               return (
                 <div
@@ -347,12 +392,38 @@ export default function CompetitorsPage() {
                   className="card p-6"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <span
-                      className="text-sm font-medium"
-                      style={{ color: "var(--text-secondary)" }}
-                    >
-                      {r.competitorName}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-sm font-medium"
+                        style={{ color: "var(--text-secondary)" }}
+                      >
+                        {r.competitorName}
+                      </span>
+                      {difficulty === "blocked" && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-full"
+                          style={{
+                            background: "rgba(204, 51, 51, 0.12)",
+                            color: "#CC3333",
+                            border: "1px solid rgba(204, 51, 51, 0.25)",
+                          }}
+                        >
+                          Blocked
+                        </span>
+                      )}
+                      {difficulty === "hard" && (
+                        <span
+                          className="inline-flex items-center px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wider rounded-full"
+                          style={{
+                            background: "rgba(217, 119, 6, 0.12)",
+                            color: "#D97706",
+                            border: "1px solid rgba(217, 119, 6, 0.25)",
+                          }}
+                        >
+                          Hard Crawl
+                        </span>
+                      )}
+                    </div>
                     <span
                       className="text-[10px]"
                       style={{ color: "var(--text-subtle)" }}

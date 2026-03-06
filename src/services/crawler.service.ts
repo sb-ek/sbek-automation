@@ -13,6 +13,8 @@ export interface CrawlProduct {
   url?: string;
 }
 
+export type CrawlDifficulty = 'easy' | 'hard' | 'blocked';
+
 export interface CrawlResult {
   url: string;
   title: string;
@@ -36,6 +38,8 @@ export interface CrawlResult {
   links: string[];
   pageCount: number;
   crawledAt: string;
+  /** How difficult this site is to crawl — 'easy' (no protection), 'hard' (has challenges but resolved), 'blocked' (could not bypass) */
+  crawlDifficulty: CrawlDifficulty;
 }
 
 // ── Stealth helpers ─────────────────────────────────────────────────
@@ -158,10 +162,27 @@ class CrawlerService {
 
     // Try headless browser first, fallback to plain fetch
     let mainPageHtml: string;
+    let crawlDifficulty: CrawlDifficulty = 'easy';
     try {
       mainPageHtml = await this.fetchWithBrowser(url);
     } catch (browserErr) {
-      logger.warn({ url, err: String(browserErr) }, 'Browser fetch failed — trying plain HTTP fallback');
+      const errMsg = String(browserErr);
+      // If bot protection blocked us, mark as blocked and return early
+      if (errMsg.includes('Bot protection blocked')) {
+        logger.warn({ url }, 'Site has heavy bot protection — marking as blocked');
+        return {
+          url,
+          title: 'Bot protection blocked crawl',
+          products: [],
+          meta: {},
+          techSeo: { hasSchema: false, schemaTypes: [], h1Tags: [], h2Tags: [], hasOpenGraph: false, hasSitemap: false, robotsTxt: '' },
+          links: [],
+          pageCount: 0,
+          crawledAt: new Date().toISOString(),
+          crawlDifficulty: 'blocked',
+        };
+      }
+      logger.warn({ url, err: errMsg }, 'Browser fetch failed — trying plain HTTP fallback');
       try {
         mainPageHtml = await this.fetchPlain(url);
       } catch (plainErr) {
@@ -175,11 +196,21 @@ class CrawlerService {
           links: [],
           pageCount: 0,
           crawledAt: new Date().toISOString(),
+          crawlDifficulty: 'blocked',
         };
       }
     }
 
     logger.info({ url, htmlLength: mainPageHtml.length }, 'Main page fetched');
+
+    // Detect if the site has bot protection markers (even if we got through)
+    if (mainPageHtml.includes('cf-browser-verification') || mainPageHtml.includes('challenge-platform') ||
+        mainPageHtml.includes('__cf_chl_opt') || mainPageHtml.includes('cloudflare') ||
+        mainPageHtml.includes('akamai') || mainPageHtml.includes('datadome') ||
+        mainPageHtml.includes('perimeterx') || mainPageHtml.includes('imperva')) {
+      crawlDifficulty = 'hard';
+      logger.info({ url }, 'Site has bot protection markers — marking as hard crawl');
+    }
 
     const $ = cheerio.load(mainPageHtml);
 
@@ -228,6 +259,7 @@ class CrawlerService {
       links: internalLinks.slice(0, 50),
       pageCount: 1 + subPageResults.length,
       crawledAt: new Date().toISOString(),
+      crawlDifficulty,
     };
 
     logger.info(
