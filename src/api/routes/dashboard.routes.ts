@@ -1341,6 +1341,87 @@ dashboardRouter.get('/seo', async (_req: Request, res: Response) => {
   }
 });
 
+/** SEO/AEO per-product status — checks which products have SEO meta fields populated */
+dashboardRouter.get('/seo/products', async (req: Request, res: Response) => {
+  try {
+    const page = Number(req.query.page) || 1;
+    const perPage = Math.min(Number(req.query.per_page) || 20, 100);
+
+    // Fetch products from WooCommerce
+    const products = await woocommerce.listProducts({ per_page: perPage, page, status: 'publish' });
+
+    const SEO_KEYS = ['_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_sbek_faq_json_ld', '_sbek_schema_json_ld'];
+
+    const productStatuses = products.map((p) => {
+      const meta = p.meta_data ?? [];
+      const getMeta = (key: string) => meta.find((m) => m.key === key)?.value || '';
+
+      const seoTitle = getMeta('_yoast_wpseo_title');
+      const seoDesc = getMeta('_yoast_wpseo_metadesc');
+      const faqJsonLd = getMeta('_sbek_faq_json_ld');
+      const schemaJsonLd = getMeta('_sbek_schema_json_ld');
+      const hasFaqHtml = (p.description || '').includes('class="sbek-faq"');
+      const hasInternalLinks = (p.description || '').includes('sbek-related-products');
+
+      return {
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        image: p.images?.[0]?.src ?? null,
+        price: p.price,
+        seo: {
+          title: seoTitle || null,
+          description: seoDesc || null,
+          hasMeta: !!(seoTitle && seoDesc),
+        },
+        faq: {
+          hasJsonLd: !!faqJsonLd,
+          hasHtml: hasFaqHtml,
+          count: faqJsonLd ? (JSON.parse(faqJsonLd)?.mainEntity?.length ?? 0) : 0,
+        },
+        schema: {
+          hasJsonLd: !!schemaJsonLd,
+        },
+        internalLinks: hasInternalLinks,
+      };
+    });
+
+    // Summary stats
+    const total = productStatuses.length;
+    const withSeoMeta = productStatuses.filter((p) => p.seo.hasMeta).length;
+    const withFaq = productStatuses.filter((p) => p.faq.hasJsonLd).length;
+    const withSchema = productStatuses.filter((p) => p.schema.hasJsonLd).length;
+    const withInternalLinks = productStatuses.filter((p) => p.internalLinks).length;
+
+    res.json({
+      products: productStatuses,
+      stats: { total, withSeoMeta, withFaq, withSchema, withInternalLinks },
+      page,
+      perPage,
+    });
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch SEO product statuses');
+    res.json({ products: [], stats: { total: 0, withSeoMeta: 0, withFaq: 0, withSchema: 0, withInternalLinks: 0 }, page: 1, perPage: 20 });
+  }
+});
+
+/** Recent content-pipeline job activity */
+dashboardRouter.get('/seo/activity', async (_req: Request, res: Response) => {
+  try {
+    const recentJobs = await db
+      .select()
+      .from(jobLogs)
+      .where(eq(jobLogs.queueName, 'content-generation'))
+      .orderBy(desc(jobLogs.createdAt))
+      .limit(30);
+
+    res.json({ jobs: recentJobs });
+  } catch (err) {
+    logger.error({ err }, 'Failed to fetch SEO activity');
+    res.json({ jobs: [] });
+  }
+});
+
 // ── Notification History ──────────────────────────────────────────────────
 
 dashboardRouter.get('/notifications/history', async (req: Request, res: Response) => {
