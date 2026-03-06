@@ -176,10 +176,10 @@ class CrawlerService {
     // Collect internal links for deeper crawl
     const internalLinks = this.extractInternalLinks($, baseUrl);
 
-    // Find product/collection pages (max 5 sub-pages)
+    // Find product/collection pages (max 8 sub-pages)
     const productPages = internalLinks
-      .filter((l) => /\/(product|shop|collection|jewel|ring|necklace|earring|bracelet|pendant|category)/i.test(l))
-      .slice(0, 5);
+      .filter((l) => /\/(product|shop|collection|jewel|ring|necklace|earring|bracelet|pendant|category|catalog|bangles|chains|mangalsutra|gold|diamond|silver|platinum|solitaire|engagement|wedding|gift|new-arrival|best-seller|trending|offers)/i.test(l))
+      .slice(0, 8);
 
     const allProducts: CrawlProduct[] = [];
 
@@ -253,7 +253,7 @@ class CrawlerService {
     // Hard timeout for the entire page operation — prevents infinite hangs
     const pageTimeout = setTimeout(() => {
       page.close().catch(() => {});
-    }, 45_000);
+    }, 55_000);
 
     try {
       const ua = randomUA();
@@ -271,28 +271,38 @@ class CrawlerService {
         timeout: 30_000,
       });
 
-      // Wait for JS-rendered content
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Wait for JS-rendered content (SPAs need more time)
+      await new Promise((resolve) => setTimeout(resolve, 2500));
 
-      // Scroll down to trigger lazy-loaded content (capped iterations)
+      // Try to wait for common product container selectors
+      try {
+        await page.waitForSelector(
+          '.product-card, .product-item, .product, [class*="ProductCard"], [class*="productCard"], [class*="product-card"], [class*="plp-product"], [class*="catalog-product"], [itemtype*="Product"]',
+          { timeout: 5000 },
+        );
+      } catch {
+        // No product selectors found — that's okay, we'll try other extraction methods
+      }
+
+      // Scroll down to trigger lazy-loaded content (more aggressive for jewelry SPAs)
       await page.evaluate(async () => {
         await new Promise<void>((resolve) => {
           let totalHeight = 0;
-          const distance = 400;
+          const distance = 500;
           let iterations = 0;
           const timer = setInterval(() => {
             window.scrollBy(0, distance);
             totalHeight += distance;
             iterations++;
-            if (totalHeight >= document.body.scrollHeight || totalHeight > 5000 || iterations > 20) {
+            if (totalHeight >= document.body.scrollHeight || totalHeight > 8000 || iterations > 25) {
               clearInterval(timer);
               resolve();
             }
-          }, 100);
+          }, 120);
         });
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
 
       const html = await page.content();
 
@@ -424,59 +434,134 @@ class CrawlerService {
   private extractProducts($: cheerio.CheerioAPI, baseUrl: string): CrawlProduct[] {
     const products: CrawlProduct[] = [];
 
-    // Strategy 1: JSON-LD Product schema
+    // Strategy 1: JSON-LD Product schema (most reliable)
     $('script[type="application/ld+json"]').each((_, el) => {
       try {
         const json = JSON.parse($(el).text());
-        const items = json['@type'] === 'Product' ? [json]
+        const candidates = json['@type'] === 'Product' ? [json]
+          : json['@type'] === 'ItemList' && Array.isArray(json.itemListElement)
+            ? json.itemListElement.map((i: Record<string, unknown>) => i.item || i).filter((i: Record<string, string>) => i['@type'] === 'Product')
           : Array.isArray(json['@graph'])
             ? json['@graph'].filter((i: Record<string, string>) => i['@type'] === 'Product')
             : [];
 
-        for (const item of items) {
-          const price = item.offers?.price || item.offers?.lowPrice || 0;
+        for (const item of candidates) {
+          const offers = item.offers;
+          const price = offers?.price || offers?.lowPrice
+            || (Array.isArray(offers) ? offers[0]?.price : 0) || 0;
           products.push({
             name: item.name || '',
-            price: parseFloat(price) || 0,
-            currency: item.offers?.priceCurrency || 'INR',
+            price: parseFloat(String(price)) || 0,
+            currency: offers?.priceCurrency || (Array.isArray(offers) ? offers[0]?.priceCurrency : 'INR') || 'INR',
             url: item.url || undefined,
           });
         }
-      } catch { /* skip */ }
+      } catch { /* skip invalid JSON-LD */ }
     });
 
-    // Strategy 2: Common e-commerce CSS selectors
+    // Strategy 2: Common e-commerce CSS selectors (broad set covering Indian jewelry sites)
     const selectors = [
+      // Generic e-commerce
       '.product-card', '.product-item', '.product', '.wc-block-grid__product',
       '[data-product-id]', '.grid-product', '.productCard', '.product-thumbnail',
       '.product-tile', '.product-grid-item', '.plp-card', '.product-listing',
+      // Tanishq / Titan
+      '.product-list-item', '.product-box', '.product_box', '.product-info',
+      '[class*="ProductCard"]', '[class*="productCard"]', '[class*="product-card"]',
+      '[class*="ProductTile"]', '[class*="productTile"]', '[class*="product-tile"]',
+      '[class*="ProductItem"]', '[class*="product-item"]',
+      // CaratLane / BlueStone
+      '[class*="plp-product"]', '[class*="plp_product"]', '[class*="PLPProduct"]',
+      '[class*="search-product"]', '[class*="catalog-product"]',
+      '.product-collection-item', '.collection-product',
+      // Generic card patterns
+      '[class*="card"][class*="product"]', '[class*="item"][class*="product"]',
+      '[data-testid*="product"]', '[data-component*="product"]',
+      // Image grid fallback (many jewelry sites use image grids)
+      '.product-grid > div', '.products-grid > div', '.product-list > div',
+      '[class*="ProductGrid"] > div', '[class*="productGrid"] > div',
     ];
+
+    // Name selectors — broad to catch custom class names
+    const nameSelectors = [
+      '.product-title', '.product-name', '.woocommerce-loop-product__title',
+      'h2', 'h3', 'h4',
+      '.title', '.name',
+      '[class*="name"]', '[class*="title"]', '[class*="Name"]', '[class*="Title"]',
+      '[class*="product-name"]', '[class*="productName"]',
+      'a[title]', // many sites put product name in link title attr
+    ].join(', ');
+
+    // Price selectors
+    const priceSelectors = [
+      '.price', '.product-price', '.amount',
+      '[class*="price"]', '[class*="Price"]',
+      '[class*="cost"]', '[class*="Cost"]',
+      '[class*="mrp"]', '[class*="MRP"]',
+      '[class*="offer"]',
+    ].join(', ');
 
     for (const selector of selectors) {
       const found: CrawlProduct[] = [];
       $(selector).each((_, el) => {
         const $el = $(el);
-        const name = $el.find('.product-title, .product-name, .woocommerce-loop-product__title, h2, h3, .title, [class*="name"], [class*="title"]').first().text().trim();
-        const priceText = $el.find('.price, .product-price, .amount, [class*="price"]').first().text().trim();
-        const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
-        const link = $el.find('a').first().attr('href');
+        // Try name from selectors, then from link title attribute
+        let name = $el.find(nameSelectors).first().text().trim();
+        if (!name) {
+          name = $el.find('a[title]').attr('title')?.trim() || '';
+        }
+        if (!name) {
+          name = $el.find('img[alt]').attr('alt')?.trim() || '';
+        }
 
-        if (name && name.length > 2) {
+        const priceText = $el.find(priceSelectors).first().text().trim();
+        const price = this.parseIndianPrice(priceText);
+        const link = $el.find('a').first().attr('href') || $el.closest('a').attr('href');
+
+        if (name && name.length > 2 && name.length < 300) {
           found.push({
             name,
             price,
             currency: 'INR',
-            url: link ? new URL(link, baseUrl).href : undefined,
+            url: link ? (() => { try { return new URL(link, baseUrl).href; } catch { return undefined; } })() : undefined,
           });
         }
       });
-      if (found.length > 0) {
+      if (found.length >= 2) { // need at least 2 matches to trust the selector
         products.push(...found);
-        break; // use first matching selector
+        break;
       }
     }
 
+    // Strategy 3: If nothing found yet, try micro-data (itemprop)
+    if (products.length === 0) {
+      $('[itemtype*="schema.org/Product"], [itemtype*="Product"]').each((_, el) => {
+        const $el = $(el);
+        const name = $el.find('[itemprop="name"]').first().text().trim();
+        const priceText = $el.find('[itemprop="price"]').first().text().trim() || $el.find('[itemprop="price"]').attr('content') || '';
+        const price = this.parseIndianPrice(priceText);
+        const url = $el.find('[itemprop="url"]').attr('href') || $el.find('a').first().attr('href');
+
+        if (name && name.length > 2) {
+          products.push({
+            name,
+            price,
+            currency: 'INR',
+            url: url ? (() => { try { return new URL(url, baseUrl).href; } catch { return undefined; } })() : undefined,
+          });
+        }
+      });
+    }
+
     return products;
+  }
+
+  /** Parse Indian price format: ₹1,23,456.00 → 123456 */
+  private parseIndianPrice(text: string): number {
+    if (!text) return 0;
+    // Remove currency symbols, spaces, and commas, keep digits and decimal
+    const cleaned = text.replace(/[₹$€£\s,]/g, '').replace(/[^0-9.]/g, '');
+    return parseFloat(cleaned) || 0;
   }
 
   private deduplicateProducts(products: CrawlProduct[]): CrawlProduct[] {
@@ -498,7 +583,7 @@ class CrawlerService {
   ): Promise<Array<{ url: string; products: CrawlProduct[] }>> {
     const results: Array<{ url: string; products: CrawlProduct[] }> = [];
 
-    // Crawl sub-pages sequentially (2s delay between) to avoid rate limiting
+    // Crawl sub-pages sequentially (1.5s delay between) to avoid rate limiting
     for (const path of urls) {
       try {
         const fullUrl = `${baseUrl}${path}`;
@@ -506,13 +591,20 @@ class CrawlerService {
         try {
           html = await this.fetchWithBrowser(fullUrl);
         } catch {
-          html = await this.fetchPlain(fullUrl);
+          try {
+            html = await this.fetchPlain(fullUrl);
+          } catch {
+            logger.warn({ url: fullUrl }, 'Sub-page fetch failed — skipping');
+            continue;
+          }
         }
         const $ = cheerio.load(html);
-        results.push({ url: fullUrl, products: this.extractProducts($, baseUrl) });
+        const subProducts = this.extractProducts($, baseUrl);
+        results.push({ url: fullUrl, products: subProducts });
+        logger.debug({ url: fullUrl, productsFound: subProducts.length }, 'Sub-page crawled');
 
         // Delay between sub-page crawls to be respectful
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise((resolve) => setTimeout(resolve, 1500));
       } catch (err) {
         logger.warn({ url: `${baseUrl}${path}`, err: String(err) }, 'Sub-page crawl failed — skipping');
       }
