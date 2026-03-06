@@ -718,6 +718,8 @@ class GoogleSheetsService {
   async getCompetitors(): Promise<Array<{ name: string; url: string }>> {
     this.assertInitialized();
     try {
+      // Ensure the tab is loaded and headers are correct
+      await this.ensureTab(TAB_NAMES.COMPETITORS);
       const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
       if (!sheet) return [];
 
@@ -739,6 +741,7 @@ class GoogleSheetsService {
   async appendCompetitor(data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
+      await this.ensureTab(TAB_NAMES.COMPETITORS);
       const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
       if (!sheet) return;
 
@@ -765,6 +768,7 @@ class GoogleSheetsService {
   async updateCompetitor(name: string, data: Record<string, string>): Promise<void> {
     this.assertInitialized();
     try {
+      await this.ensureTab(TAB_NAMES.COMPETITORS);
       const sheet = this.getSheet(TAB_NAMES.COMPETITORS);
       if (!sheet) return;
 
