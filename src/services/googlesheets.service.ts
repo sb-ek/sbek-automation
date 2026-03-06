@@ -776,6 +776,60 @@ class GoogleSheetsService {
     }
   }
 
+  /** Debug — return raw sheet data for troubleshooting */
+  async debugCompetitors(): Promise<Record<string, unknown>> {
+    this.assertInitialized();
+    if (!this.doc) return { error: 'doc is null' };
+
+    await this.doc.loadInfo();
+
+    const allTitles = this.doc.sheetsByIndex.map((s) => s.title);
+    const sheet = this.doc.sheetsByTitle[TAB_NAMES.COMPETITORS];
+
+    if (!sheet) {
+      return { error: 'Sheet not found', allTitles, expected: TAB_NAMES.COMPETITORS };
+    }
+
+    try {
+      await sheet.loadHeaderRow();
+    } catch (e) {
+      return { error: 'loadHeaderRow failed', message: String(e), allTitles, sheetTitle: sheet.title };
+    }
+
+    const headers = sheet.headerValues;
+    const rows = await sheet.getRows();
+    const rawRows = rows.map((r) => ({
+      toObject: r.toObject(),
+      name: r.get('Name'),
+      url: r.get('URL'),
+      active: r.get('Active'),
+      rowIndex: r.rowNumber,
+    }));
+
+    // Also try reading from the cache
+    const cachedSheet = this.getSheet(TAB_NAMES.COMPETITORS);
+    let cachedHeaders: string[] | undefined;
+    let cachedRowCount = -1;
+    if (cachedSheet) {
+      try {
+        await cachedSheet.loadHeaderRow();
+        cachedHeaders = cachedSheet.headerValues;
+        const cachedRows = await cachedSheet.getRows();
+        cachedRowCount = cachedRows.length;
+      } catch { /* ignore */ }
+    }
+
+    return {
+      allTitles,
+      sheetTitle: sheet.title,
+      headers,
+      rowCount: rows.length,
+      rawRows,
+      cachedHeaders,
+      cachedRowCount,
+    };
+  }
+
   /** Add a new competitor row (with dedup — skips if Name already exists). */
   async appendCompetitor(data: Record<string, string>): Promise<void> {
     this.assertInitialized();

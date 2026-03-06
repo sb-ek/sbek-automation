@@ -900,6 +900,16 @@ dashboardRouter.get('/competitors', async (_req: Request, res: Response) => {
   }
 });
 
+/** Debug endpoint — returns raw sheet data to diagnose empty competitors */
+dashboardRouter.get('/competitors/debug', async (_req: Request, res: Response) => {
+  try {
+    const debug = await sheets.debugCompetitors();
+    res.json(debug);
+  } catch (err) {
+    res.status(500).json({ error: String(err) });
+  }
+});
+
 /** Add a new competitor */
 dashboardRouter.post('/competitors', async (req: Request, res: Response) => {
   try {
