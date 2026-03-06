@@ -1,4 +1,6 @@
 import * as cheerio from 'cheerio';
+import puppeteer from 'puppeteer';
+import type { Browser, Page } from 'puppeteer';
 import { logger } from '../config/logger.js';
 
 // ── Interfaces ──────────────────────────────────────────────────────
@@ -36,7 +38,7 @@ export interface CrawlResult {
   crawledAt: string;
 }
 
-// ── User-Agent rotation to avoid blocking ───────────────────────────
+// ── Stealth helpers ─────────────────────────────────────────────────
 
 const USER_AGENTS = [
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -45,34 +47,124 @@ const USER_AGENTS = [
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15',
 ];
 
+function randomUA(): string {
+  return USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
+}
+
+/** Apply stealth patches to a Puppeteer page to evade bot detection. */
+async function applyStealthPatches(page: Page): Promise<void> {
+  // Override navigator.webdriver
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'webdriver', { get: () => false });
+  });
+
+  // Override chrome runtime
+  await page.evaluateOnNewDocument(() => {
+    (window as unknown as Record<string, unknown>).chrome = {
+      runtime: {},
+      loadTimes: () => ({}),
+      csi: () => ({}),
+      app: { isInstalled: false },
+    };
+  });
+
+  // Override permissions query
+  await page.evaluateOnNewDocument(() => {
+    const originalQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+    window.navigator.permissions.query = (params: PermissionDescriptor) => {
+      if (params.name === 'notifications') {
+        return Promise.resolve({ state: 'denied', onchange: null } as PermissionStatus);
+      }
+      return originalQuery(params);
+    };
+  });
+
+  // Override plugins length
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'plugins', {
+      get: () => [1, 2, 3, 4, 5],
+    });
+  });
+
+  // Override languages
+  await page.evaluateOnNewDocument(() => {
+    Object.defineProperty(navigator, 'languages', {
+      get: () => ['en-IN', 'en-US', 'en'],
+    });
+  });
+
+  // Pass WebGL vendor/renderer check
+  await page.evaluateOnNewDocument(() => {
+    const getParameter = WebGLRenderingContext.prototype.getParameter;
+    WebGLRenderingContext.prototype.getParameter = function (param: number) {
+      if (param === 37445) return 'Intel Inc.';
+      if (param === 37446) return 'Intel Iris OpenGL Engine';
+      return getParameter.call(this, param);
+    };
+  });
+}
+
 // ── Service ─────────────────────────────────────────────────────────
 
 class CrawlerService {
+  private browser: Browser | null = null;
+
+  /** Get or launch a shared Chromium browser instance. */
+  private async getBrowser(): Promise<Browser> {
+    if (this.browser && this.browser.connected) return this.browser;
+
+    const execPath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    this.browser = await puppeteer.launch({
+      headless: true,
+      ...(execPath ? { executablePath: execPath } : {}),
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-blink-features=AutomationControlled',
+        '--disable-infobars',
+        '--window-size=1920,1080',
+        '--disable-dev-shm-usage',
+        '--disable-gpu',
+        '--lang=en-IN,en',
+        '--single-process',
+      ],
+    });
+
+    logger.info('Puppeteer browser launched');
+    return this.browser;
+  }
 
   /**
    * Crawl a competitor site and extract structured data.
-   * Built-in scraper — no external microservice needed.
+   * Strategy: Puppeteer headless browser first (bypasses Cloudflare/bot protection),
+   * with cheerio fallback for simple HTTP fetch.
    */
   async analyzeSite(url: string, _previousCrawl?: Record<string, unknown>): Promise<CrawlResult> {
-    logger.info({ url }, 'Starting built-in site crawl');
+    logger.info({ url }, 'Starting site crawl');
 
     const baseUrl = new URL(url).origin;
 
+    // Try headless browser first, fallback to plain fetch
     let mainPageHtml: string;
     try {
-      mainPageHtml = await this.fetchPage(url);
-    } catch (err) {
-      logger.warn({ url, err: String(err) }, 'Main page fetch failed — returning minimal result');
-      return {
-        url,
-        title: `Failed to crawl: ${String(err)}`,
-        products: [],
-        meta: {},
-        techSeo: { hasSchema: false, schemaTypes: [], h1Tags: [], h2Tags: [], hasOpenGraph: false, hasSitemap: false, robotsTxt: '' },
-        links: [],
-        pageCount: 0,
-        crawledAt: new Date().toISOString(),
-      };
+      mainPageHtml = await this.fetchWithBrowser(url);
+    } catch (browserErr) {
+      logger.warn({ url, err: String(browserErr) }, 'Browser fetch failed — trying plain HTTP fallback');
+      try {
+        mainPageHtml = await this.fetchPlain(url);
+      } catch (plainErr) {
+        logger.warn({ url, err: String(plainErr) }, 'All fetch methods failed — returning minimal result');
+        return {
+          url,
+          title: `Failed to crawl: ${String(plainErr)}`,
+          products: [],
+          meta: {},
+          techSeo: { hasSchema: false, schemaTypes: [], h1Tags: [], h2Tags: [], hasOpenGraph: false, hasSitemap: false, robotsTxt: '' },
+          links: [],
+          pageCount: 0,
+          crawledAt: new Date().toISOString(),
+        };
+      }
     }
 
     const $ = cheerio.load(mainPageHtml);
@@ -84,7 +176,7 @@ class CrawlerService {
     // Collect internal links for deeper crawl
     const internalLinks = this.extractInternalLinks($, baseUrl);
 
-    // Find product/collection pages (max 5 sub-pages to stay within rate limits)
+    // Find product/collection pages (max 5 sub-pages)
     const productPages = internalLinks
       .filter((l) => /\/(product|shop|collection|jewel|ring|necklace|earring|bracelet|pendant|category)/i.test(l))
       .slice(0, 5);
@@ -94,7 +186,7 @@ class CrawlerService {
     // Extract products from main page
     allProducts.push(...this.extractProducts($, baseUrl));
 
-    // Crawl sub-pages in parallel (3 concurrent)
+    // Crawl sub-pages
     const subPageResults = await this.crawlSubPages(productPages, baseUrl);
     for (const result of subPageResults) {
       allProducts.push(...result.products);
@@ -103,7 +195,7 @@ class CrawlerService {
     // Deduplicate products by name
     const uniqueProducts = this.deduplicateProducts(allProducts);
 
-    // Check sitemap and robots.txt
+    // Check sitemap and robots.txt (plain fetch is fine for these)
     techSeo.hasSitemap = await this.checkUrl(`${baseUrl}/sitemap.xml`);
     techSeo.robotsTxt = await this.fetchText(`${baseUrl}/robots.txt`);
 
@@ -120,7 +212,7 @@ class CrawlerService {
 
     logger.info(
       { url, productsFound: uniqueProducts.length, pagesScraped: crawlResult.pageCount },
-      'Built-in site crawl completed',
+      'Site crawl completed',
     );
 
     return crawlResult;
@@ -129,6 +221,115 @@ class CrawlerService {
   /** Health check — always healthy since this is built-in. */
   async getHealth(): Promise<{ status: string }> {
     return { status: 'ok' };
+  }
+
+  /** Close the browser (for graceful shutdown). */
+  async close(): Promise<void> {
+    if (this.browser) {
+      await this.browser.close();
+      this.browser = null;
+    }
+  }
+
+  // ── Fetch strategies ──────────────────────────────────────────────
+
+  /** Fetch a page using a headless Chromium browser — bypasses Cloudflare & JS challenges. */
+  private async fetchWithBrowser(url: string): Promise<string> {
+    const browser = await this.getBrowser();
+    const page = await browser.newPage();
+
+    try {
+      const ua = randomUA();
+      await page.setUserAgent(ua);
+      await page.setViewport({ width: 1920, height: 1080 });
+      await page.setExtraHTTPHeaders({
+        'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8',
+      });
+
+      await applyStealthPatches(page);
+
+      // Navigate with extended timeout — some sites are slow after challenge
+      await page.goto(url, {
+        waitUntil: 'networkidle2',
+        timeout: 30_000,
+      });
+
+      // Wait a bit for any JS-rendered content to load
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Scroll down to trigger lazy-loaded content
+      await page.evaluate(async () => {
+        await new Promise<void>((resolve) => {
+          let totalHeight = 0;
+          const distance = 400;
+          const timer = setInterval(() => {
+            window.scrollBy(0, distance);
+            totalHeight += distance;
+            if (totalHeight >= document.body.scrollHeight || totalHeight > 5000) {
+              clearInterval(timer);
+              resolve();
+            }
+          }, 100);
+        });
+      });
+
+      // Wait for any lazy content triggered by scroll
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      const html = await page.content();
+
+      // Check if we got a Cloudflare challenge page
+      if (html.includes('Just a moment...') || html.includes('cf-browser-verification')) {
+        logger.warn({ url }, 'Cloudflare challenge detected — waiting longer');
+        await new Promise((resolve) => setTimeout(resolve, 8000));
+        const retryHtml = await page.content();
+        return retryHtml;
+      }
+
+      return html;
+    } finally {
+      await page.close();
+    }
+  }
+
+  /** Plain HTTP fetch — fast fallback for sites without bot protection. */
+  private async fetchPlain(url: string): Promise<string> {
+    const ua = randomUA();
+    const parsedUrl = new URL(url);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 20_000);
+
+    try {
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': ua,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8,hi;q=0.7',
+          'Accept-Encoding': 'gzip, deflate, br',
+          'Referer': `${parsedUrl.origin}/`,
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'same-origin',
+          'Sec-Fetch-User': '?1',
+          'Sec-CH-UA': '"Chromium";v="131", "Not_A Brand";v="24"',
+          'Sec-CH-UA-Mobile': '?0',
+          'Sec-CH-UA-Platform': '"Windows"',
+          'Upgrade-Insecure-Requests': '1',
+          'Cache-Control': 'max-age=0',
+          'Connection': 'keep-alive',
+        },
+        signal: controller.signal,
+        redirect: 'follow',
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} for ${url}`);
+      }
+
+      return await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
   }
 
   // ── HTML extraction helpers ─────────────────────────────────────
@@ -214,14 +415,15 @@ class CrawlerService {
     const selectors = [
       '.product-card', '.product-item', '.product', '.wc-block-grid__product',
       '[data-product-id]', '.grid-product', '.productCard', '.product-thumbnail',
+      '.product-tile', '.product-grid-item', '.plp-card', '.product-listing',
     ];
 
     for (const selector of selectors) {
       const found: CrawlProduct[] = [];
       $(selector).each((_, el) => {
         const $el = $(el);
-        const name = $el.find('.product-title, .product-name, .woocommerce-loop-product__title, h2, h3').first().text().trim();
-        const priceText = $el.find('.price, .product-price, .amount').first().text().trim();
+        const name = $el.find('.product-title, .product-name, .woocommerce-loop-product__title, h2, h3, .title, [class*="name"], [class*="title"]').first().text().trim();
+        const priceText = $el.find('.price, .product-price, .amount, [class*="price"]').first().text().trim();
         const price = parseFloat(priceText.replace(/[^0-9.]/g, '')) || 0;
         const link = $el.find('a').first().attr('href');
 
@@ -262,70 +464,34 @@ class CrawlerService {
   ): Promise<Array<{ url: string; products: CrawlProduct[] }>> {
     const results: Array<{ url: string; products: CrawlProduct[] }> = [];
 
-    for (let i = 0; i < urls.length; i += 3) {
-      const batch = urls.slice(i, i + 3);
-      const batchResults = await Promise.allSettled(
-        batch.map(async (path) => {
-          const fullUrl = `${baseUrl}${path}`;
-          const html = await this.fetchPage(fullUrl);
-          const $ = cheerio.load(html);
-          return { url: fullUrl, products: this.extractProducts($, baseUrl) };
-        }),
-      );
+    // Crawl sub-pages sequentially (2s delay between) to avoid rate limiting
+    for (const path of urls) {
+      try {
+        const fullUrl = `${baseUrl}${path}`;
+        let html: string;
+        try {
+          html = await this.fetchWithBrowser(fullUrl);
+        } catch {
+          html = await this.fetchPlain(fullUrl);
+        }
+        const $ = cheerio.load(html);
+        results.push({ url: fullUrl, products: this.extractProducts($, baseUrl) });
 
-      for (const r of batchResults) {
-        if (r.status === 'fulfilled') results.push(r.value);
+        // Delay between sub-page crawls to be respectful
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+      } catch (err) {
+        logger.warn({ url: `${baseUrl}${path}`, err: String(err) }, 'Sub-page crawl failed — skipping');
       }
     }
 
     return results;
   }
 
-  // ── HTTP helpers ─────────────────────────────────────────────────
-
-  private async fetchPage(url: string): Promise<string> {
-    const ua = USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
-    const parsedUrl = new URL(url);
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 20_000);
-
-    try {
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': ua,
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-          'Accept-Language': 'en-IN,en-US;q=0.9,en;q=0.8,hi;q=0.7',
-          'Accept-Encoding': 'gzip, deflate, br',
-          'Referer': `${parsedUrl.origin}/`,
-          'Sec-Fetch-Dest': 'document',
-          'Sec-Fetch-Mode': 'navigate',
-          'Sec-Fetch-Site': 'same-origin',
-          'Sec-Fetch-User': '?1',
-          'Sec-CH-UA': '"Chromium";v="131", "Not_A Brand";v="24"',
-          'Sec-CH-UA-Mobile': '?0',
-          'Sec-CH-UA-Platform': '"Windows"',
-          'Upgrade-Insecure-Requests': '1',
-          'Cache-Control': 'max-age=0',
-          'Connection': 'keep-alive',
-        },
-        signal: controller.signal,
-        redirect: 'follow',
-      });
-
-      if (!response.ok) {
-        logger.warn({ url, status: response.status }, 'Crawl fetch failed — site may block bots');
-        throw new Error(`HTTP ${response.status} for ${url}`);
-      }
-
-      return await response.text();
-    } finally {
-      clearTimeout(timeout);
-    }
-  }
+  // ── Simple HTTP helpers ───────────────────────────────────────────
 
   private async fetchText(url: string): Promise<string> {
     try {
-      const html = await this.fetchPage(url);
+      const html = await this.fetchPlain(url);
       return html.slice(0, 2000);
     } catch {
       return '';
@@ -336,7 +502,11 @@ class CrawlerService {
     try {
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), 5_000);
-      const response = await fetch(url, { method: 'HEAD', signal: controller.signal });
+      const response = await fetch(url, {
+        method: 'HEAD',
+        signal: controller.signal,
+        headers: { 'User-Agent': randomUA() },
+      });
       clearTimeout(timeout);
       return response.ok;
     } catch {

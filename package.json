@@ -47,6 +47,8 @@
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "pino-pretty": "^13.0.0",
+    "puppeteer": "^24.38.0",
+    "puppeteer-core": "^24.38.0",
     "sharp": "^0.34.5",
     "zod": "^3.24.0"
   },

@@ -111,6 +111,12 @@ async function shutdown(signal: string) {
     logger.error({ err }, 'Error closing PostgreSQL pool');
   }
 
+  try {
+    const { crawler } = await import('./services/crawler.service.js');
+    await crawler.close();
+    logger.info('Crawler browser closed');
+  } catch { /* ignore if not started */ }
+
   process.exit(0);
 }
 
