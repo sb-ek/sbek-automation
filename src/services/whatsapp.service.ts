@@ -1,174 +1,106 @@
-import { env } from '../config/env.js';
 import { logger } from '../config/logger.js';
 import { settings } from './settings.service.js';
+import { env } from '../config/env.js';
 
-// ── Interfaces ──────────────────────────────────────────────────────
+// ── Types ───────────────────────────────────────────────────────────
 
-export interface TemplateComponent {
-  type: 'header' | 'body' | 'button';
-  parameters: TemplateParameter[];
-}
-
-export interface TemplateParameter {
-  type: 'text' | 'image' | 'document';
-  text?: string;
-  image?: { link: string };
-}
-
-export interface WhatsAppResponse {
-  messaging_product: string;
-  contacts: Array<{ wa_id: string }>;
-  messages: Array<{ id: string }>;
+export interface InteraktResponse {
+  id?: string;
+  result?: boolean;
+  message?: string;
 }
 
 // ── Service ─────────────────────────────────────────────────────────
 
+/**
+ * WhatsApp service powered by Interakt.
+ *
+ * All WhatsApp messages (order updates, alerts, review requests)
+ * are sent through the Interakt API.
+ */
 class WhatsAppService {
-  private baseUrl: string;
-  private headers: Record<string, string>;
+  private readonly baseUrl = 'https://api.interakt.ai/v1/public/message/';
 
-  constructor() {
-    this.baseUrl = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${env.WHATSAPP_PHONE_NUMBER_ID}`;
-    this.headers = {
-      Authorization: `Bearer ${env.WHATSAPP_ACCESS_TOKEN}`,
-      'Content-Type': 'application/json',
-    };
+  /** Resolve the Interakt API key from DB settings or env */
+  private async getApiKey(): Promise<string | undefined> {
+    return (await settings.get('INTERAKT_API_KEY')) ?? env.INTERAKT_API_KEY;
   }
 
-  /** Re-initialize the WhatsApp client with the latest credentials from settings */
-  async refreshClient(): Promise<void> {
-    const phoneId = await settings.get('WHATSAPP_PHONE_NUMBER_ID');
-    const token = await settings.get('WHATSAPP_ACCESS_TOKEN');
-    if (phoneId || token) {
-      this.baseUrl = `https://graph.facebook.com/${env.WHATSAPP_API_VERSION}/${phoneId ?? env.WHATSAPP_PHONE_NUMBER_ID}`;
-      this.headers = {
-        Authorization: `Bearer ${token ?? env.WHATSAPP_ACCESS_TOKEN}`,
-        'Content-Type': 'application/json',
-      };
-    }
+  /** Returns true if an Interakt API key is configured */
+  async isConfigured(): Promise<boolean> {
+    const key = await this.getApiKey();
+    return !!key;
   }
-
-  // ── Public methods ───────────────────────────────────────────────
 
   /**
-   * Send a pre-approved WhatsApp template message.
-   * Returns the message ID assigned by the WhatsApp Cloud API.
+   * Send a pre-approved WhatsApp template message via Interakt.
    */
   async sendTemplate(
     to: string,
     templateName: string,
-    languageCode: string,
-    components?: TemplateComponent[],
+    params: Record<string, string>,
   ): Promise<string> {
+    const phone = to.replace(/^\+/, '');
     const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'template',
+      countryCode: phone.startsWith('91') ? '+91' : `+${phone.slice(0, 2)}`,
+      phoneNumber: phone.startsWith('91') ? phone.slice(2) : phone,
+      type: 'Template',
       template: {
         name: templateName,
-        language: { code: languageCode },
-        ...(components && { components }),
+        languageCode: 'en',
+        bodyValues: Object.values(params),
       },
     };
 
-    try {
-      const data = await this.post('/messages', body);
-      const messageId = data.messages[0].id;
-      logger.info({ to, templateName, messageId }, 'WhatsApp template sent');
-      return messageId;
-    } catch (error) {
-      logger.error({ to, templateName, error }, 'Failed to send WhatsApp template');
-      throw error;
-    }
+    const data = await this.post(body);
+    const messageId = data.id ?? `interakt-${Date.now()}`;
+    logger.info({ to: phone, templateName, messageId }, 'WhatsApp template sent via Interakt');
+    return messageId;
   }
 
   /**
-   * Send a plain-text WhatsApp message.
+   * Send a plain-text WhatsApp message via Interakt.
    */
   async sendText(to: string, text: string): Promise<string> {
+    const phone = to.replace(/^\+/, '');
     const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body: text },
+      countryCode: phone.startsWith('91') ? '+91' : `+${phone.slice(0, 2)}`,
+      phoneNumber: phone.startsWith('91') ? phone.slice(2) : phone,
+      type: 'Text',
+      data: { message: text },
     };
 
-    try {
-      const data = await this.post('/messages', body);
-      const messageId = data.messages[0].id;
-      logger.info({ to, messageId }, 'WhatsApp text message sent');
-      return messageId;
-    } catch (error) {
-      logger.error({ to, error }, 'Failed to send WhatsApp text message');
-      throw error;
-    }
-  }
-
-  /**
-   * Send an image message with an optional caption.
-   */
-  async sendImage(
-    to: string,
-    imageUrl: string,
-    caption?: string,
-  ): Promise<string> {
-    const body = {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'image',
-      image: {
-        link: imageUrl,
-        ...(caption && { caption }),
-      },
-    };
-
-    try {
-      const data = await this.post('/messages', body);
-      const messageId = data.messages[0].id;
-      logger.info({ to, messageId }, 'WhatsApp image message sent');
-      return messageId;
-    } catch (error) {
-      logger.error({ to, imageUrl, error }, 'Failed to send WhatsApp image message');
-      throw error;
-    }
+    const data = await this.post(body);
+    const messageId = data.id ?? `interakt-text-${Date.now()}`;
+    logger.info({ to: phone, messageId }, 'WhatsApp text sent via Interakt');
+    return messageId;
   }
 
   // ── Private helper ───────────────────────────────────────────────
 
-  /**
-   * Low-level POST to the WhatsApp Cloud API with a 30-second timeout.
-   * Always resolves the latest credentials from settings before sending.
-   */
-  private async post(endpoint: string, body: unknown): Promise<WhatsAppResponse> {
-    // Resolve latest credentials before every request
-    await this.refreshClient();
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30_000);
-
-    try {
-      const response = await fetch(`${this.baseUrl}${endpoint}`, {
-        method: 'POST',
-        headers: this.headers,
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      });
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        logger.error(
-          { status: response.status, errorBody, endpoint },
-          'WhatsApp API error response',
-        );
-        throw new Error(
-          `WhatsApp API responded with ${response.status}: ${errorBody}`,
-        );
-      }
-
-      return (await response.json()) as WhatsAppResponse;
-    } finally {
-      clearTimeout(timeout);
+  private async post(body: unknown): Promise<InteraktResponse> {
+    const apiKey = await this.getApiKey();
+    if (!apiKey) {
+      throw new Error('INTERAKT_API_KEY not configured — set it in Dashboard → Settings or as an env var');
     }
+
+    const res = await fetch(this.baseUrl, {
+      method: 'POST',
+      headers: {
+        Authorization: `Basic ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15_000),
+    });
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      logger.error({ status: res.status, errBody }, 'Interakt API error');
+      throw new Error(`Interakt API ${res.status}: ${errBody}`);
+    }
+
+    return (await res.json()) as InteraktResponse;
   }
 }
 

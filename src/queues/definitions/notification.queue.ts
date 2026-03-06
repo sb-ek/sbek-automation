@@ -3,7 +3,6 @@ import { env } from '../../config/env.js';
 import { logger } from '../../config/logger.js';
 import type { NotificationPayload } from '../types.js';
 import { whatsapp } from '../../services/whatsapp.service.js';
-import { wati } from '../../services/wati.service.js';
 import { email } from '../../services/email.service.js';
 import { logJobActive, logJobCompleted, logJobFailed } from '../job-logger.js';
 import { db } from '../../config/database.js';
@@ -20,7 +19,7 @@ function redisOpts() {
 }
 
 /**
- * Notification Worker — fan-out dispatcher for WhatsApp and Email.
+ * Notification Worker — fan-out dispatcher for WhatsApp (Interakt) and Email.
  * Workflows enqueue jobs with channel: 'whatsapp' | 'email' | 'both'.
  */
 export const notificationWorker = new Worker<NotificationPayload>(
@@ -75,77 +74,47 @@ export const notificationWorker = new Worker<NotificationPayload>(
       }
     }
 
-    // WhatsApp (best-effort — don't block job if unconfigured)
+    // WhatsApp via Interakt
     if ((channel === 'whatsapp' || channel === 'both') && recipientPhone) {
-      try {
-        const msgId = await whatsapp.sendTemplate(
-          recipientPhone,
-          templateName,
-          'en',
-          [
-            {
-              type: 'body',
-              parameters: Object.values(templateData).map((val) => ({ type: 'text' as const, text: val })),
-            },
-          ]
-        );
-        results.whatsapp = msgId;
-        logger.info({ recipientPhone, templateName, msgId }, 'WhatsApp sent via Meta');
+      const configured = await whatsapp.isConfigured();
+      if (!configured) {
+        logger.warn({ recipientPhone, templateName }, 'WhatsApp (Interakt) not configured — skipping');
+        results.whatsapp = 'not_configured';
+      } else {
         try {
-          await db.insert(notificationLogs).values({
-            orderId: job.data.orderId ?? null,
-            recipientName: safeName,
-            recipientEmail: recipientEmail ?? null,
-            recipientPhone,
-            channel: 'whatsapp',
-            templateName,
-            status: 'sent',
-          });
-        } catch (logErr) {
-          logger.warn({ err: logErr }, 'Failed to log WhatsApp notification');
-        }
-      } catch (metaErr) {
-        logger.warn({ err: metaErr, recipientPhone, templateName }, 'Meta WhatsApp failed — trying backup');
-
-        if (wati.isConfigured()) {
+          const msgId = await whatsapp.sendTemplate(recipientPhone, templateName, templateData);
+          results.whatsapp = msgId;
+          logger.info({ recipientPhone, templateName, msgId }, 'WhatsApp sent via Interakt');
           try {
-            const backup = await wati.sendTemplate(recipientPhone, templateName, templateData);
-            results.whatsapp = `${backup.provider}:${backup.messageId}`;
-            logger.info({ recipientPhone, templateName, provider: backup.provider }, 'WhatsApp sent via backup');
-            try {
-              await db.insert(notificationLogs).values({
-                orderId: job.data.orderId ?? null,
-                recipientName: safeName,
-                recipientEmail: recipientEmail ?? null,
-                recipientPhone,
-                channel: 'whatsapp',
-                templateName,
-                status: 'sent',
-              });
-            } catch (logErr) {
-              logger.warn({ err: logErr }, 'Failed to log WhatsApp backup notification');
-            }
-          } catch (backupErr) {
-            logger.error({ err: backupErr, recipientPhone, templateName }, 'All WhatsApp providers failed');
-            results.whatsapp = 'failed';
-            try {
-              await db.insert(notificationLogs).values({
-                orderId: job.data.orderId ?? null,
-                recipientName: safeName,
-                recipientEmail: recipientEmail ?? null,
-                recipientPhone,
-                channel: 'whatsapp',
-                templateName,
-                status: 'failed',
-                error: backupErr instanceof Error ? backupErr.message : String(backupErr),
-              });
-            } catch (logErr) {
-              logger.warn({ err: logErr }, 'Failed to log WhatsApp notification failure');
-            }
+            await db.insert(notificationLogs).values({
+              orderId: job.data.orderId ?? null,
+              recipientName: safeName,
+              recipientEmail: recipientEmail ?? null,
+              recipientPhone,
+              channel: 'whatsapp',
+              templateName,
+              status: 'sent',
+            });
+          } catch (logErr) {
+            logger.warn({ err: logErr }, 'Failed to log WhatsApp notification');
           }
-        } else {
-          logger.warn({ recipientPhone, templateName }, 'WhatsApp not configured — skipping');
-          results.whatsapp = 'not_configured';
+        } catch (err) {
+          logger.error({ err, recipientPhone, templateName }, 'WhatsApp (Interakt) failed');
+          results.whatsapp = 'failed';
+          try {
+            await db.insert(notificationLogs).values({
+              orderId: job.data.orderId ?? null,
+              recipientName: safeName,
+              recipientEmail: recipientEmail ?? null,
+              recipientPhone,
+              channel: 'whatsapp',
+              templateName,
+              status: 'failed',
+              error: err instanceof Error ? err.message : String(err),
+            });
+          } catch (logErr) {
+            logger.warn({ err: logErr }, 'Failed to log WhatsApp notification failure');
+          }
         }
       }
     }
@@ -176,6 +145,7 @@ const emailSubjects: Record<string, string> = {
   'production_brief': 'SBEK Production Brief - New Order Assignment',
   'qc_failed_alert': 'SBEK QC Alert - Rework Required',
   'competitor_alert': 'SBEK Competitor Intelligence Report',
+  'price_alert': 'SBEK Price Alert — Competitor Price Changes',
 };
 
 notificationWorker.on('completed', (job) => {

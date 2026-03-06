@@ -32,10 +32,8 @@ const envSchema = z.object({
   GOOGLE_SHEET_ID: z.string().min(1).optional(),
   GOOGLE_DRIVE_FOLDER_ID: z.string().min(1).optional(),
 
-  // ── WhatsApp / Meta ────────────────────────────────────
-  WHATSAPP_PHONE_NUMBER_ID: z.string().min(1).optional(),
-  WHATSAPP_ACCESS_TOKEN: z.string().min(1).optional(),
-  WHATSAPP_API_VERSION: z.string().default('v21.0'),
+  // ── WhatsApp (Interakt) ────────────────────────────────
+  INTERAKT_API_KEY: z.string().min(1).optional(),
 
   // ── Email / SMTP ───────────────────────────────────────
   SMTP_HOST: z.string().min(1).optional(),
@@ -52,12 +50,6 @@ const envSchema = z.object({
   GOOGLE_OAUTH_CLIENT_SECRET: z.string().min(1).optional(),
   GOOGLE_OAUTH_REFRESH_TOKEN: z.string().min(1).optional(),
 
-  // ── Wati (WhatsApp backup) ───────────────────────────
-  WATI_API_KEY: z.string().min(1).optional(),
-  WATI_BASE_URL: z.string().url().optional(),
-
-  // ── Interakt (WhatsApp backup) ───────────────────────
-  INTERAKT_API_KEY: z.string().min(1).optional(),
 
   // ── Crawler ────────────────────────────────────────────
   CRAWLER_BASE_URL: z.string().url().default('http://crawler:3001'),

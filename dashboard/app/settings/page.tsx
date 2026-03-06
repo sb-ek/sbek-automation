@@ -100,32 +100,23 @@ const SECTIONS: SectionDef[] = [
   },
   // Google section is handled separately as a custom component
   {
-    id: "whatsapp-meta",
-    title: "WhatsApp (Meta Cloud API)",
+    id: "whatsapp-interakt",
+    title: "WhatsApp (Interakt)",
     icon: "\u2709",
     description:
-      "Primary WhatsApp Business Cloud API for order confirmations, shipping updates, and review requests.",
+      "WhatsApp Business API via Interakt for order confirmations, shipping updates, competitor alerts, and review requests.",
     testable: true,
     fields: [
       {
-        key: "WHATSAPP_PHONE_NUMBER_ID",
-        label: "Phone Number ID",
-        type: "text",
-        hint: "Numeric ID from Meta, NOT your phone number (e.g. 123456789012345)",
-        howToGet: "Go to developers.facebook.com → Your App → WhatsApp → API Setup → copy the Phone Number ID shown under 'From'",
-        required: true,
-      },
-      {
-        key: "WHATSAPP_ACCESS_TOKEN",
-        label: "Permanent Access Token",
+        key: "INTERAKT_API_KEY",
+        label: "API Key",
         type: "password",
-        hint: "Long-lived token — temporary tokens expire in 24 hours",
-        howToGet: "Go to business.facebook.com/settings/system-users → Create System User (Admin) → Generate Token → Select WhatsApp app → Permissions: whatsapp_business_messaging → Generate → copy",
+        hint: "Your Interakt API key for sending WhatsApp messages",
+        howToGet: "Go to app.interakt.ai → Settings → Developer Settings → API Keys → copy your API key",
         required: true,
       },
     ],
   },
-  // WhatsApp backup (Wati/Interakt) removed — handled internally
   {
     id: "email-smtp",
     title: "Email (Gmail API)",

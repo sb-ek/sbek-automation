@@ -24,15 +24,7 @@ export const CONFIGURABLE_KEYS = [
   'GOOGLE_SHEET_ID',
   'GOOGLE_DRIVE_FOLDER_ID',
 
-  // WhatsApp — Meta (primary)
-  'WHATSAPP_PHONE_NUMBER_ID',
-  'WHATSAPP_ACCESS_TOKEN',
-
-  // WhatsApp — Wati (backup)
-  'WATI_API_KEY',
-  'WATI_BASE_URL',
-
-  // WhatsApp — Interakt (backup)
+  // WhatsApp (Interakt)
   'INTERAKT_API_KEY',
 
   // Email / SMTP
@@ -217,12 +209,10 @@ const FULLY_MASKED_KEYS = new Set([
   'WOO_CONSUMER_SECRET',
   'WOO_WEBHOOK_SECRET',
   'GOOGLE_PRIVATE_KEY',
-  'WHATSAPP_ACCESS_TOKEN',
   'SMTP_PASS',
   'OPENROUTER_API_KEY',
   'GOOGLE_OAUTH_CLIENT_SECRET',
   'GOOGLE_OAUTH_REFRESH_TOKEN',
-  'WATI_API_KEY',
   'INTERAKT_API_KEY',
 ]);
 

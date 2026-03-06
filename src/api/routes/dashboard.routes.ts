@@ -843,27 +843,37 @@ dashboardRouter.post('/settings/validate', async (req: Request, res: Response) =
         return;
       }
 
-      case 'whatsapp-meta': {
-        const phoneId = await resolve('WHATSAPP_PHONE_NUMBER_ID');
-        const token = await resolve('WHATSAPP_ACCESS_TOKEN');
-        if (!phoneId || !token) {
-          res.json({ valid: false, message: 'Phone Number ID and Access Token are required' });
+      case 'whatsapp-interakt': {
+        const interaktKey = await resolve('INTERAKT_API_KEY');
+        if (!interaktKey) {
+          res.json({ valid: false, message: 'Interakt API Key is required' });
           return;
         }
+        // Verify the key by calling Interakt's track endpoint (lightweight)
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 10000);
         const resp = await fetch(
-          `https://graph.facebook.com/v21.0/${phoneId}`,
-          { headers: { Authorization: `Bearer ${token}` }, signal: controller.signal },
+          'https://api.interakt.ai/v1/public/track/users/',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Basic ${interaktKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              phoneNumber: '0000000000',
+              countryCode: '+91',
+              traits: { name: 'SBEK Test' },
+            }),
+            signal: controller.signal,
+          },
         );
         clearTimeout(timeout);
-        if (!resp.ok) {
-          const body = await resp.json().catch(() => ({})) as Record<string, unknown>;
-          const errMsg = (body.error as Record<string, unknown>)?.message ?? `HTTP ${resp.status}`;
-          res.json({ valid: false, message: `WhatsApp API: ${errMsg}` });
+        if (resp.status === 401 || resp.status === 403) {
+          res.json({ valid: false, message: 'Invalid Interakt API key — check your credentials' });
           return;
         }
-        res.json({ valid: true, message: 'WhatsApp Cloud API credentials verified' });
+        res.json({ valid: true, message: 'Interakt API key verified' });
         return;
       }
 
