@@ -67,7 +67,10 @@ class GoogleDriveService {
       this.drive = google.drive({ version: 'v3', auth });
 
       // Use explicit folder ID if provided, otherwise auto-create "SBEK Creatives"
-      const explicitFolderId = (await settings.get('GOOGLE_DRIVE_FOLDER_ID')) ?? env.GOOGLE_DRIVE_FOLDER_ID;
+      const rawFolderId = (await settings.get('GOOGLE_DRIVE_FOLDER_ID')) ?? env.GOOGLE_DRIVE_FOLDER_ID ?? '';
+      // Extract folder ID from full URL if user pasted a Drive link
+      const folderIdMatch = rawFolderId.match(/folders\/([a-zA-Z0-9_-]+)/);
+      const explicitFolderId = folderIdMatch ? folderIdMatch[1] : rawFolderId;
       this.folderId = explicitFolderId || await this.ensureFolder('SBEK Creatives');
 
       this.initialized = true;
