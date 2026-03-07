@@ -3,15 +3,13 @@ FROM node:20-slim AS builder
 
 WORKDIR /app
 
-ENV NODE_OPTIONS="--max-old-space-size=384"
-
 COPY package.json package-lock.json* ./
-RUN npm ci --maxsockets=2
+RUN NODE_OPTIONS="--max-old-space-size=512" npm ci --maxsockets=2
 
 COPY tsconfig.json ./
 COPY src/ ./src/
 
-RUN npm run build
+RUN NODE_OPTIONS="--max-old-space-size=512" npx tsc --declaration false --sourceMap false
 
 FROM node:20-slim AS runner
 
