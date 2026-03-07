@@ -96,6 +96,22 @@ const SECTIONS: SectionDef[] = [
         howToGet: "WooCommerce → Settings → Advanced → Webhooks → Add → copy the Secret",
         required: true,
       },
+      {
+        key: "WP_APP_USERNAME",
+        label: "WP Application Username",
+        type: "text",
+        hint: "WordPress admin username (for pages/posts API)",
+        howToGet: "Your WordPress admin username (usually the one you log in with)",
+        required: true,
+      },
+      {
+        key: "WP_APP_PASSWORD",
+        label: "WP Application Password",
+        type: "password",
+        hint: "Generated in WP Admin → Users → Profile → Application Passwords",
+        howToGet: "WP Admin → Users → Your Profile → scroll to Application Passwords → enter a name → Add New → copy the password",
+        required: true,
+      },
     ],
   },
   // Google section is handled separately as a custom component

@@ -477,9 +477,9 @@ class WooCommerceService {
 
   /**
    * Make a request to the WordPress REST API (wp/v2).
-   * Uses Basic Auth with WooCommerce consumer key:secret.
-   * This works because WooCommerce registers its API keys as valid
-   * application passwords when the site is on HTTPS.
+   * Uses WordPress Application Passwords for authentication.
+   * WooCommerce API keys do NOT work for wp/v2 endpoints — you must
+   * generate an Application Password in WP Admin → Users → Your Profile.
    */
   private async wpRequest(
     method: 'GET' | 'POST' | 'PUT',
@@ -487,11 +487,19 @@ class WooCommerceService {
     body?: Record<string, unknown>,
   ): Promise<any> {
     const url = (await settings.get('WOO_URL')) ?? env.WOO_URL;
-    const key = (await settings.get('WOO_CONSUMER_KEY')) ?? env.WOO_CONSUMER_KEY;
-    const secret = (await settings.get('WOO_CONSUMER_SECRET')) ?? env.WOO_CONSUMER_SECRET;
+    const wpUser = (await settings.get('WP_APP_USERNAME')) ?? env.WP_APP_USERNAME;
+    const wpPass = (await settings.get('WP_APP_PASSWORD')) ?? env.WP_APP_PASSWORD;
+
+    if (!wpUser || !wpPass) {
+      throw new Error(
+        'WordPress Application Password not configured. ' +
+        'Go to WP Admin → Users → Your Profile → Application Passwords, ' +
+        'generate one, then set WP_APP_USERNAME and WP_APP_PASSWORD in Settings.',
+      );
+    }
 
     const fullUrl = `${url}/wp-json/wp/v2/${endpoint}`;
-    const authHeader = 'Basic ' + Buffer.from(`${key}:${secret}`).toString('base64');
+    const authHeader = 'Basic ' + Buffer.from(`${wpUser}:${wpPass}`).toString('base64');
 
     const options: RequestInit = {
       method,

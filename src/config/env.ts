@@ -26,6 +26,10 @@ const envSchema = z.object({
   WOO_CONSUMER_SECRET: z.string().min(1).optional(),
   WOO_WEBHOOK_SECRET: z.string().min(1).optional(),
 
+  // ── WordPress Application Password (for wp/v2 REST API) ──
+  WP_APP_USERNAME: z.string().min(1).optional(),
+  WP_APP_PASSWORD: z.string().min(1).optional(),
+
   // ── Google ─────────────────────────────────────────────
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().email().optional(),
   GOOGLE_PRIVATE_KEY: z.string().min(1).optional(),

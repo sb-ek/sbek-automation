@@ -18,6 +18,10 @@ export const CONFIGURABLE_KEYS = [
   'WOO_CONSUMER_SECRET',
   'WOO_WEBHOOK_SECRET',
 
+  // WordPress Application Password (for wp/v2 REST API — pages, posts)
+  'WP_APP_USERNAME',
+  'WP_APP_PASSWORD',
+
   // Google Sheets & Drive
   'GOOGLE_SERVICE_ACCOUNT_EMAIL',
   'GOOGLE_PRIVATE_KEY',
@@ -208,6 +212,7 @@ class SettingsService {
 const FULLY_MASKED_KEYS = new Set([
   'WOO_CONSUMER_SECRET',
   'WOO_WEBHOOK_SECRET',
+  'WP_APP_PASSWORD',
   'GOOGLE_PRIVATE_KEY',
   'SMTP_PASS',
   'OPENROUTER_API_KEY',
