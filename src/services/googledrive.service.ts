@@ -40,7 +40,7 @@ class GoogleDriveService {
       auth = new JWT({
         email: serviceEmail,
         key: privateKey.replace(/\\n/g, '\n'),
-        scopes: ['https://www.googleapis.com/auth/drive.file'],
+        scopes: ['https://www.googleapis.com/auth/drive'],
       });
       logger.info('Google Drive: using service account JWT authentication');
     } else {
