@@ -1350,8 +1350,6 @@ dashboardRouter.get('/seo/products', async (req: Request, res: Response) => {
     // Fetch products from WooCommerce
     const products = await woocommerce.listProducts({ per_page: perPage, page, status: 'publish' });
 
-    const SEO_KEYS = ['_yoast_wpseo_title', '_yoast_wpseo_metadesc', '_sbek_faq_json_ld', '_sbek_schema_json_ld'];
-
     const productStatuses = products.map((p) => {
       const meta = p.meta_data ?? [];
       const getMeta = (key: string) => meta.find((m) => m.key === key)?.value || '';
