@@ -16,6 +16,7 @@ export const authRouter = Router();
 const SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/gmail.send',
   'https://www.googleapis.com/auth/userinfo.email',
 ];
 
@@ -112,11 +113,10 @@ authRouter.get('/google/callback', async (req, res) => {
 
     logger.info({ email }, 'Google OAuth connected successfully');
 
-    // Redirect back to dashboard settings — derive from Referer or env
+    // Redirect back to dashboard settings
     const dashboardUrl =
       process.env.DASHBOARD_URL ??
-      (req.headers.referer ? new URL(req.headers.referer).origin : null) ??
-      'http://localhost:3001';
+      'https://dashboard-production-d473.up.railway.app';
     res.redirect(`${dashboardUrl}/settings?google=connected`);
   } catch (error) {
     logger.error({ err: error }, 'Google OAuth callback failed');

@@ -117,7 +117,20 @@ function drawCoverPage(doc: PDFKit.PDFDocument, filterName: string | undefined, 
 
 function drawCompetitorSection(doc: PDFKit.PDFDocument, name: string, snapshot: SnapshotRow) {
   const data = snapshot.data as CrawlResult | null;
-  if (!data) return;
+  if (!data) {
+    // Still render a minimal section for competitors with no crawl data
+    let y = 50;
+    doc.rect(0, y - 10, doc.page.width, 45).fill(BRAND.black);
+    doc.fontSize(20).fillColor(BRAND.accent).font('Helvetica-Bold');
+    doc.text(name.toUpperCase(), 50, y, { continued: false });
+    doc.fontSize(10).fillColor(BRAND.light).font('Helvetica');
+    doc.text(snapshot.url, 50, y + 24);
+    y += 65;
+    doc.fontSize(12).fillColor(BRAND.muted).font('Helvetica');
+    doc.text('No crawl data available — this competitor may be blocking automated access.', 50, y, { width: 495 });
+    doc.text('Try crawling again or check if the URL is correct.', 50, y + 20, { width: 495 });
+    return;
+  }
 
   let y = 50;
 
