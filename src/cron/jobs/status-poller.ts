@@ -1,6 +1,7 @@
 import { logger } from '../../config/logger.js';
 import { redis } from '../../config/redis.js';
 import { sheets } from '../../services/googlesheets.service.js';
+import { woocommerce } from '../../services/woocommerce.service.js';
 import { createProductionTask } from '../../workflows/production-tracking.workflow.js';
 import { completeProduction } from '../../workflows/production-tracking.workflow.js';
 import { createQCChecklist, evaluateQCResults } from '../../workflows/qc-tracking.workflow.js';
@@ -10,6 +11,18 @@ import { normalizePhone } from '../../utils/sanitize.js';
 import { formatDate } from '../../utils/date.js';
 import { db } from '../../config/database.js';
 import { webhookEvents } from '../../db/schema.js';
+
+// ── Sheet status → WooCommerce status mapping ──────────────────────────
+const SHEET_TO_WOO_STATUS: Record<string, string> = {
+  'New': 'processing',
+  'In Production': 'processing',
+  'QC': 'processing',
+  'Ready to Ship': 'processing',
+  'Shipped': 'completed',
+  'Delivered': 'completed',
+  'Cancelled': 'cancelled',
+  'Refunded': 'refunded',
+};
 
 // ── In-memory snapshot: Order ID → last-known status ─────────────────────
 // Resets on process restart — first poll re-seeds without triggering actions.
@@ -179,6 +192,17 @@ async function dispatchTransition(
     processed: true,
     processedAt: new Date(),
   }).catch((err) => { logger.warn({ err }, 'Failed to log status change to DB'); });
+
+  // ── Sync status back to WooCommerce ────────────────────────────────
+  const wooStatus = SHEET_TO_WOO_STATUS[newStatus];
+  if (wooStatus && numericId > 0) {
+    try {
+      await woocommerce.updateOrder(numericId, { status: wooStatus });
+      logger.info({ orderId, wooStatus, sheetStatus: newStatus }, 'WooCommerce order status synced from Sheets');
+    } catch (err) {
+      logger.warn({ err, orderId, wooStatus }, 'Failed to sync status to WooCommerce — continuing with notifications');
+    }
+  }
 
   // Common data for notifications
   const phone = order['Phone'] ? normalizePhone(order['Phone']) : undefined;
