@@ -1073,16 +1073,34 @@ dashboardRouter.post('/competitors/crawl', async (req: Request, res: Response) =
       return;
     }
 
+    // Check for already-active jobs to prevent duplicate crawls
     let enqueued = 0;
+    const skipped: string[] = [];
     for (const comp of toCrawl) {
-      await competitorCrawl.add(`manual-crawl-${comp.name}`, {
+      const jobId = `crawl-${comp.name.replace(/\s+/g, '-').toLowerCase()}`;
+      // Check if job already exists (active/waiting/delayed)
+      const existing = await competitorCrawl.getJob(jobId);
+      if (existing) {
+        const state = await existing.getState();
+        if (state === 'active' || state === 'waiting' || state === 'delayed') {
+          skipped.push(comp.name);
+          continue; // skip — already queued or running
+        }
+        // If completed/failed, remove so we can re-add with same jobId
+        await existing.remove();
+      }
+      await competitorCrawl.add(`crawl-${comp.name}`, {
         competitorName: comp.name,
         url: comp.url,
-      }, { jobId: `manual-crawl-${comp.name}-${Date.now()}` });
+      }, { jobId });
       enqueued++;
     }
 
-    res.json({ success: true, enqueued, competitors: toCrawl.map((c) => c.name) });
+    if (skipped.length > 0) {
+      logger.info({ skipped }, 'Skipped already-crawling competitors');
+    }
+
+    res.json({ success: true, enqueued, skipped, competitors: toCrawl.filter(c => !skipped.includes(c.name)).map((c) => c.name) });
   } catch (err) {
     logger.error({ err }, 'Failed to trigger competitor crawl');
     res.status(500).json({ error: 'Failed to trigger crawl' });

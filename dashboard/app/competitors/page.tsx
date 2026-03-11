@@ -61,6 +61,7 @@ export default function CompetitorsPage() {
   }, []);
 
   async function handleCrawlAll() {
+    if (crawlingAll || crawlingNames.size > 0) return;
     setCrawlingAll(true);
     setCrawlMsg("");
     try {
@@ -86,6 +87,8 @@ export default function CompetitorsPage() {
   }
 
   async function handleCrawlOne(name: string) {
+    // Prevent duplicate crawls
+    if (crawlingNames.has(name)) return;
     setCrawlingNames((prev) => new Set(prev).add(name));
     setCrawlMsg(`Crawling ${name} — scanning pages...`);
     try {
